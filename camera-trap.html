@@ -1644,8 +1644,8 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
   try {
     rd = new THREE.WebGLRenderer({
       canvas: cv,
-      antialias: true,
-      preserveDrawingBuffer: true,
+      antialias: (devicePixelRatio || 1) < 1.6,
+      preserveDrawingBuffer: false,
       powerPreference: "high-performance",
     });
   } catch (e) {
@@ -1658,10 +1658,10 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
   rd.shadowMap.enabled = true;
   rd.shadowMap.type = THREE.PCFShadowMap;
   const sc = new THREE.Scene(),
-    cam = new THREE.PerspectiveCamera(72, W / H, 0.1, 240);
+    cam = new THREE.PerspectiveCamera(72, W / H, 0.1, 180);
   cam.rotation.order = "YXZ";
   sc.add(cam);
-  const pcam = new THREE.PerspectiveCamera(58, 4 / 3, 0.1, 240);
+  const pcam = new THREE.PerspectiveCamera(58, 4 / 3, 0.1, 180);
   pcam.layers.enable(1);
   const ENV = {
     night: { bg: 0x04090d, fog: 0x061014, d: 0.036, h: 0.32, dr: 0.15, dc: 0x9db8d8 },
@@ -2293,6 +2293,135 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     sc.add(m);
     return m;
   }
+  /* ------------------------------------------------------------------
+     Static-mesh baker.  The cab and the camera posts are built from
+     hundreds of little boxes, and every box used to be its own draw call.
+     Finished subtrees are flattened here: colour becomes a vertex
+     attribute, so every opaque box of the same material type ends up in a
+     single mesh.  `keep` lists subtrees that still animate.
+  ------------------------------------------------------------------ */
+  const BAKE_STD = { MeshLambertMaterial: 1, MeshBasicMaterial: 1, MeshPhongMaterial: 1 };
+  function bakeKey(m, o) {
+    const base = [
+      m.type,
+      m.transparent ? 1 : 0,
+      m.opacity,
+      m.side,
+      m.depthWrite ? 1 : 0,
+      m.blending,
+      m.map ? m.map.uuid : "",
+      m.metalness || 0,
+      m.roughness || 0,
+      o.castShadow ? 1 : 0,
+      o.receiveShadow ? 1 : 0,
+    ];
+    const glow = m.emissive && (m.emissive.r || m.emissive.g || m.emissive.b);
+    if (!m.map && !m.transparent && !glow && !m.alphaTest && BAKE_STD[m.type]) {
+      return base.join("~") + "~VC";
+    }
+    return (
+      base.join("~") +
+      "~" +
+      (m.color ? m.color.getHexString() : "") +
+      "~" +
+      (m.emissive ? m.emissive.getHexString() : "") +
+      "~" +
+      (m.emissiveIntensity || 0)
+    );
+  }
+  function bakeStatic(root, keep, label) {
+    if (!root) return 0;
+    const keepSet = new Set();
+    (keep || []).forEach((o) => o && o.traverse((n) => keepSet.add(n)));
+    root.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
+    const groups = new Map(),
+      drop = [],
+      tmp = new THREE.Matrix4();
+    root.traverse((o) => {
+      if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh) return;
+      let p = o.parent,
+        skip = false;
+      while (p && p !== root) {
+        if (keepSet.has(p)) {
+          skip = true;
+          break;
+        }
+        p = p.parent;
+      }
+      if (skip || keepSet.has(o)) return;
+      const m = o.material,
+        g = o.geometry;
+      if (!m || Array.isArray(m) || !g || !g.attributes || !g.attributes.position) return;
+      if (m.isSpriteMaterial || m.isShaderMaterial) return;
+      const key = bakeKey(m, o);
+      let grp = groups.get(key);
+      if (!grp) {
+        grp = {
+          mat: m,
+          cast: o.castShadow,
+          recv: o.receiveShadow,
+          col: m.color ? m.color.clone() : null,
+          vc: key.endsWith("~VC"),
+          geos: [],
+        };
+        groups.set(key, grp);
+      }
+      const gg = g.index ? g.toNonIndexed() : g.clone();
+      gg.applyMatrix4(tmp.multiplyMatrices(inv, o.matrixWorld));
+      grp.geos.push(gg);
+      drop.push(o);
+    });
+    if (!drop.length) return 0;
+    let made = 0;
+    groups.forEach((grp) => {
+      const list = grp.geos;
+      let total = 0;
+      list.forEach((g) => (total += g.attributes.position.count));
+      const pos = new Float32Array(total * 3),
+        nor = new Float32Array(total * 3),
+        uv = new Float32Array(total * 2),
+        col = grp.vc ? new Float32Array(total * 3) : null;
+      let off = 0;
+      const c = grp.col;
+      list.forEach((g) => {
+        const n = g.attributes.position.count;
+        pos.set(g.attributes.position.array.subarray(0, n * 3), off * 3);
+        if (g.attributes.normal) nor.set(g.attributes.normal.array.subarray(0, n * 3), off * 3);
+        if (g.attributes.uv) uv.set(g.attributes.uv.array.subarray(0, n * 2), off * 2);
+        if (col && c) {
+          for (let i = 0; i < n; i++) {
+            col[(off + i) * 3] = c.r;
+            col[(off + i) * 3 + 1] = c.g;
+            col[(off + i) * 3 + 2] = c.b;
+          }
+        }
+        off += n;
+      });
+      const merged = new THREE.BufferGeometry();
+      merged.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      merged.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
+      merged.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+      if (col) merged.setAttribute("color", new THREE.BufferAttribute(col, 3));
+      merged.computeBoundingSphere();
+      merged.computeBoundingBox();
+      let mat = grp.mat;
+      if (grp.vc) {
+        mat = grp.mat.clone();
+        mat.vertexColors = true;
+        mat.color.setHex(0xffffff);
+      }
+      const mesh = new THREE.Mesh(merged, mat);
+      mesh.castShadow = grp.cast;
+      mesh.receiveShadow = grp.recv;
+      mesh.name = (label || "baked") + made;
+      root.add(mesh);
+      made++;
+      list.forEach((g) => g.dispose());
+    });
+    drop.forEach((o) => o.parent && o.parent.remove(o));
+    return made;
+  }
   (function ground() {
     /* displaced forest floor: ridges, hollows and a flat camp */
     const SIZE = 440,
@@ -2383,6 +2512,10 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       side: THREE.DoubleSide,
       roughness: 1,
       metalness: 0,
+      /* a faint self-lit floor keeps the blades from turning into black
+         shards once the moon is the only light left */
+      emissive: 0x0b1a12,
+      emissiveIntensity: 0.2,
     });
     const fernMat = new THREE.MeshStandardMaterial({
       map: fernTex,
@@ -2390,6 +2523,8 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       side: THREE.DoubleSide,
       roughness: 1,
       metalness: 0,
+      emissive: 0x09150f,
+      emissiveIntensity: 0.18,
     });
     const grassField = scatter(GEO.grass, 0x21402a, 2600, () => {
       const a = R() * PI * 2,
@@ -2406,7 +2541,7 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       };
     }, [0.27, 0.32, 0.11, 0.03, 0.06], grassMat);
     grassField.castShadow = false;
-    const tallField = scatter(GEO.tallGrass, 0x2c4a2c, 620, () => {
+    const tallField = scatter(GEO.tallGrass, 0x2c4a2c, 520, () => {
       const t = TRAILS[2 + Math.floor(R() * 5)],
         k = R(),
         side = R() < 0.5 ? -1 : 1,
@@ -2414,8 +2549,8 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
         z = t[1] + (t[3] - t[1]) * k + (R() - 0.5) * 3;
       return {
         x, z, y: terrainH(x, z) + 0.2,
-        s: 0.6 + R() * 0.9,
-        sy: 0.7 + R() * 0.8,
+        s: 0.55 + R() * 0.6,
+        sy: 0.6 + R() * 0.55,
         ry: R() * PI,
       };
     }, [0.26, 0.34, 0.11, 0.03, 0.06], grassMat);
@@ -2836,11 +2971,11 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     /* The old body was one solid box. Every face pointed outwards, so standing
        inside you looked straight through the wall into the forest. The shell is
        separate panels now and the interior is built from the floor up. */
-    const SKIN = 0xb3ac9c,
-      SKIN_D = 0x8e8779,
+    const SKIN = 0xb2ab9a,
+      SKIN_D = 0x8d8679,
       TRIM = 0x6a6459,
       METAL = 0x9d988c,
-      CAB = 0xa8a294;
+      CAB = 0xa7a193;
     const F = 0.86; /* interior floor */
     const glassMat = new THREE.MeshLambertMaterial({
       color: 0x243a38,
@@ -2890,6 +3025,12 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     bx(6.16, 0.4, 0.08, SKIN, 0, 2.82, -1.2, rv);
     bx(4.14, 0.76, 0.08, SKIN, -1.01, 2.24, -1.2, rv);
     bx(0.94, 0.76, 0.08, SKIN, 2.61, 2.24, -1.2, rv);
+    /* painted coach stripe: the flat shell reads as a box without it */
+    for (const z of [1.206, -1.206]) {
+      bx(6.02, 0.12, 0.014, 0x6d3a2e, -0.06, 1.4, z, rv);
+      bx(6.02, 0.035, 0.014, 0xb9ad90, -0.06, 1.475, z, rv);
+      bx(6.02, 0.05, 0.014, 0x5c3227, -0.06, 1.34, z, rv);
+    }
     /* rear wall + front bulkhead with a curtained cab opening */
     bx(0.08, 2.16, 2.44, SKIN_D, 3.08, 1.94, 0, rv);
     bx(0.08, 2.16, 0.9, SKIN_D, -3.0, 1.94, -0.79, rv);
@@ -3450,54 +3591,83 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       const wiper = bx(0.025, 0.025, 0.66, 0x141517, -4.73, 1.36, z, rv);
       wiper.rotation.x = z > 0 ? 0.5 : -0.5;
     }
-    const dashLight = new THREE.PointLight(0xffcf9a, 0.26, 1.6, 2);
+    const dashLight = new THREE.PointLight(0xffcf9a, 0.42, 1.9, 2);
     dashLight.position.set(-4.24, 1.6, 0.55);
     rv.add(dashLight);
-    const handLight = new THREE.PointLight(0xffd3aa, 0.22, 1.2, 2);
-    handLight.position.set(-3.9, 1.84, 0.45);
-    rv.add(handLight);
-    const cabFill = new THREE.PointLight(0xffc9a2, 0.16, 2.4, 2);
+    const cabFill = new THREE.PointLight(0xffc9a2, 0.24, 2.5, 2);
     cabFill.position.set(-3.7, 1.75, 0.25);
     rv.add(cabFill);
-    const domeLight = new THREE.PointLight(0xffd2a0, 0.34, 2.2, 2);
-    domeLight.position.set(-3.8, 2.0, 0.05);
-    rv.add(domeLight);
     /* ---- hands and a Nokia 3310 for the opening scene ------------------- */
     const skin = new THREE.MeshLambertMaterial({ color: 0x1e1811 });
     const skinTop = new THREE.MeshLambertMaterial({ color: 0x2b231a });
     const jacket = new THREE.MeshStandardMaterial({ color: 0x3c4a43, roughness: 0.95 });
+    /* A gloved hand gripping the rim.  Built from a palm mass, a knuckle
+       ridge, four three-segment fingers that curl over the rim, a two
+       segment thumb and a cuff heading down out of frame: the silhouette
+       now reads as a hand instead of a mitten. */
+    const glove = new THREE.MeshLambertMaterial({ color: 0x1a1410 });
+    const gloveTop = new THREE.MeshLambertMaterial({ color: 0x231b14 });
+    const gloveDark = new THREE.MeshLambertMaterial({ color: 0x0e0b08 });
     const handModel = (side) => {
       const g = new THREE.Group();
-      /* forearm comes towards the camera, palm rests on the rim */
-      /* the forearm drops away towards the driver's lap */
-      /* no forearm: it would point straight at the lens and read as a tube */
-      const palm = new THREE.Mesh(new THREE.SphereGeometry(0.043, 16, 12), skinTop);
-      palm.scale.set(1.3, 0.42, 0.9);
-      palm.position.set(-0.008, -0.004, 0);
+      const seg = (r1, r2, len, mat) =>
+        new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, len, 8), mat || glove);
+      /* palm and the padded back of the hand */
+      const palm = new THREE.Mesh(new THREE.SphereGeometry(0.042, 14, 10), gloveTop);
+      palm.scale.set(1.2, 0.5, 0.88);
+      palm.position.set(-0.006, -0.004, 0);
       g.add(palm);
+      const back = new THREE.Mesh(new THREE.SphereGeometry(0.039, 12, 8), glove);
+      back.scale.set(1.15, 0.38, 0.88);
+      back.position.set(0.012, 0.006, 0);
+      g.add(back);
+      /* knuckle ridge */
       for (let i = 0; i < 4; i++) {
-        const k = new THREE.Mesh(new THREE.SphereGeometry(0.0115, 8, 6), skin);
-        k.position.set(-0.052, 0.008, -0.033 + i * 0.022);
+        const k = new THREE.Mesh(new THREE.SphereGeometry(0.0128, 8, 6), gloveTop);
+        k.scale.set(1, 0.92, 1);
+        k.position.set(0.042, 0.004, -0.033 + i * 0.0225);
         g.add(k);
       }
-      /* four fingers wrapped over the rim, two segments each */
+      /* Four fingers wrapping the rim towards the driver and curling down
+         over the near face: three segments each, tapering to the tip. */
       for (let i = 0; i < 4; i++) {
-        const z = -0.036 + i * 0.024;
-        const f1 = new THREE.Mesh(new THREE.CylinderGeometry(0.0095, 0.0105, 0.056, 8), skin);
-        f1.rotation.z = PI / 2;
-        f1.position.set(-0.074, 0.002, z);
+        const z = -0.0335 + i * 0.0225;
+        const f1 = seg(0.0104, 0.0116, i === 3 ? 0.032 : 0.038);
+        f1.rotation.z = -PI / 2 + 0.05;
+        f1.position.set(0.058, 0.004, z);
         g.add(f1);
-        const f2 = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.0095, 0.044, 8), skin);
-        f2.rotation.z = PI / 2.35;
-        f2.position.set(-0.117, -0.019, z);
+        const f2 = seg(0.009, 0.0104, 0.03);
+        f2.rotation.z = -PI / 2 - 0.95;
+        f2.position.set(0.079, -0.017, z);
         g.add(f2);
+        const f3 = seg(0.0076, 0.009, 0.024);
+        f3.rotation.z = -PI / 2 - 1.72;
+        f3.position.set(0.074, -0.041, z);
+        g.add(f3);
+        const nail = new THREE.Mesh(new THREE.SphereGeometry(0.0072, 6, 5), gloveDark);
+        nail.scale.set(1.15, 0.7, 1);
+        nail.position.set(0.07, -0.054, z);
+        g.add(nail);
       }
-      /* thumb across the inside of the rim */
-      const th = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.013, 0.06, 8), skin);
-      th.rotation.x = PI / 2.1;
-      th.rotation.z = 0.25;
-      th.position.set(-0.032, -0.012, -side * 0.046);
-      g.add(th);
+      /* thumb hooked over the rim on the far side of the grip */
+      const t1 = seg(0.0128, 0.0142, 0.044);
+      t1.rotation.set(PI / 2 - 0.2, 0, -1.35);
+      t1.position.set(0.026, -0.01, -side * 0.048);
+      g.add(t1);
+      const t2 = seg(0.0092, 0.0112, 0.028);
+      t2.rotation.set(PI / 2 - 0.85, 0, -1.3);
+      t2.position.set(0.048, -0.028, -side * 0.052);
+      g.add(t2);
+      /* short wrist wedge angling down to the lap: no sleeve reaching for
+         the lens, nothing that reads as a tube at this distance */
+      const wrist = seg(0.031, 0.026, 0.075, gloveDark);
+      wrist.rotation.z = -1.05;
+      wrist.position.set(0.058, -0.03, 0);
+      g.add(wrist);
+      const cuff = seg(0.034, 0.032, 0.022, gloveTop);
+      cuff.rotation.z = -1.05;
+      cuff.position.set(0.035, -0.016, 0);
+      g.add(cuff);
       return g;
     };
     const handL = handModel(-1);
@@ -3559,6 +3729,15 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
         o.receiveShadow = false;
       }
     });
+    /* flatten the small live sub-trees first: each group keeps its own
+       transform, but its 20-odd boxes become one or two meshes. */
+    [handL, handR, handP].forEach((h) => bakeStatic(h, [], "hand"));
+    bakeStatic(phone, [], "phone");
+    bakeStatic(doorG, [], "door");
+    bakeStatic(box, spareMeshes.slice(), "batbox");
+    bakeStatic(shade, [], "shade");
+    /* then everything static in the shell: ~380 draw calls become a handful */
+    bakeStatic(rv, [steer, doorG, box, shade, handL, handR, handP, phone], "rv");
   })();
 
   /* fire */
@@ -3773,6 +3952,9 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     const gl = sprite(glowGreen, 0.6, c.mount.x, c.mount.y + 0.33, c.mount.z, sc, 0.9);
     glints.push(gl);
     c.glint = gl;
+    /* the post and the housing are static: bake them, keep the LED live */
+    bakeStatic(pole, [], "post");
+    bakeStatic(g, [led], "trap");
   });
 
   /* site */
@@ -4061,6 +4243,10 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     g.add(pelvis);
     const hips = sp(0.2, skinD, 0, 0, 0, pelvis);
     hips.scale.set(1.15, 0.8, 0.9);
+    for (const sx of [-1, 1]) {
+      const hipBone = sp(0.088, bone, sx * 0.17, 0.03, 0.02, pelvis);
+      hipBone.scale.set(0.75, 1.15, 0.7);
+    }
     /* legs: hip, knee, ankle */
     const legs = {};
     for (const sx of [-1, 1]) {
@@ -4068,19 +4254,27 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       hipJ.position.set(sx * 0.16, -0.02, 0);
       pelvis.add(hipJ);
       cy(0.068, 0.095, 0.54, skin, 0, -0.27, 0, hipJ, 8);
+      sp(0.108, skin, 0, -0.14, 0, hipJ).scale.set(0.86, 1.45, 0.82);
       const knee = new THREE.Group();
       knee.position.y = -0.55;
       hipJ.add(knee);
       sp(0.062, skinD, 0, 0, 0, knee);
       cy(0.045, 0.062, 0.5, skin, 0, -0.26, 0.02, knee, 7);
+      sp(0.062, skin, 0, -0.2, 0.02, knee).scale.set(0.8, 1.5, 0.8);
       const ankle = new THREE.Group();
       ankle.position.y = -0.52;
       knee.add(ankle);
       bx(0.11, 0.06, 0.3, skinD, 0, 0, 0.09, ankle);
+      /* three long toes, a hooked dew claw and a heel pad */
       for (let i = 0; i < 3; i++) {
-        const claw = cy(0.007, 0.012, 0.14, bone, (i - 1) * 0.035, -0.01, 0.24, ankle, 4);
-        claw.rotation.x = PI / 2.1;
+        const toe = cy(0.019, 0.024, 0.15, skinD, (i - 1) * 0.042, -0.005, 0.17, ankle, 5);
+        toe.rotation.x = PI / 2.05;
+        const claw = cy(0.004, 0.014, 0.09, bone, (i - 1) * 0.042, -0.005, 0.26, ankle, 5);
+        claw.rotation.x = PI / 1.75;
       }
+      sp(0.045, skinD, 0, -0.022, -0.03, ankle).scale.set(1, 0.6, 1.1);
+      const dew = cy(0.003, 0.009, 0.06, bone, 0, -0.03, 0.02, ankle, 4);
+      dew.rotation.x = 1.2;
       legs[sx < 0 ? "L" : "R"] = { hip: hipJ, knee: knee };
     }
     /* spine, hollow abdomen, ribcage */
@@ -4089,10 +4283,20 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     pelvis.add(spine);
     const abd = cy(0.15, 0.2, 0.5, skin, 0, 0.24, 0, spine, 10);
     abd.scale.z = 0.85;
-    for (let i = 0; i < 4; i++) {
-      const rib = cy(0.2 - i * 0.012, 0.19 - i * 0.012, 0.032, bone, 0, 0.46 + i * 0.115, 0.02, spine, 10);
+    for (let i = 0; i < 5; i++) {
+      const rib = cy(0.205 - i * 0.011, 0.196 - i * 0.011, 0.03, bone, 0, 0.44 + i * 0.108, 0.025, spine, 12);
       rib.scale.z = 0.82;
       rib.rotation.z = (R() - 0.5) * 0.06;
+      rib.rotation.x = 0.05;
+    }
+    /* breastbone and the hunched mass over the shoulders */
+    const sternum = bx(0.07, 0.46, 0.055, bone, 0, 0.66, 0.175, spine);
+    sternum.rotation.x = -0.04;
+    sp(0.19, skin, 0, 0.94, -0.06, spine).scale.set(1.3, 0.62, 0.95);
+    for (const sx of [-1, 1]) {
+      const blade = sp(0.1, skinD, sx * 0.12, 0.9, -0.12, spine);
+      blade.scale.set(0.7, 1.1, 0.5);
+      blade.rotation.z = sx * 0.35;
     }
     const chest = cy(0.24, 0.19, 0.5, skin, 0, 0.88, 0.05, spine, 10);
     chest.scale.z = 0.9;
@@ -4111,18 +4315,32 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       sh.add(shoulder);
       sp(0.075, skinD, 0, 0, 0, shoulder);
       cy(0.055, 0.075, 0.64, skin, 0, -0.33, 0, shoulder, 8);
+      sp(0.09, skin, 0, -0.1, 0, shoulder).scale.set(0.9, 1.5, 0.9);
+      sp(0.078, skin, 0, -0.46, 0, shoulder).scale.set(0.85, 1.3, 0.85);
       const elbow = new THREE.Group();
       elbow.position.y = -0.64;
       shoulder.add(elbow);
       cy(0.038, 0.055, 0.62, skin, 0, -0.31, 0, elbow, 7);
+      sp(0.058, skin, 0, 0, 0, elbow).scale.set(0.9, 1.1, 0.9);
+      sp(0.05, skin, 0, -0.2, 0, elbow).scale.set(0.85, 1.6, 0.85);
       const hand = new THREE.Group();
       hand.position.y = -0.66;
       elbow.add(hand);
       sp(0.07, skinD, 0, 0, 0.02, hand);
-      for (let i = 0; i < 4; i++) {
-        const claw = cy(0.011, 0.017, 0.22, bone, (i - 1.5) * 0.036, -0.12, 0.03, hand, 4);
-        claw.rotation.x = -0.3 + i * 0.05;
-        claw.rotation.z = (i - 1.5) * 0.09;
+      /* five splayed fingers, two segments each, tipped with curved bone */
+      for (let i = 0; i < 5; i++) {
+        const a = (i - 2) * 0.3;
+        const knuckle = sp(0.023, skinD, Math.sin(a) * 0.065, 0.004, Math.cos(a) * 0.045, hand);
+        knuckle.scale.set(1, 0.9, 1);
+        const s1 = cy(0.016, 0.019, 0.13, skin, Math.sin(a) * 0.075, -0.06, Math.cos(a) * 0.05, hand, 5);
+        s1.rotation.z = -a * 0.8;
+        s1.rotation.x = -0.2;
+        const s2 = cy(0.011, 0.016, 0.11, skinD, Math.sin(a) * 0.085, -0.166, Math.cos(a) * 0.058, hand, 5);
+        s2.rotation.z = -a * 0.6;
+        s2.rotation.x = 0.32;
+        const claw = cy(0.004, 0.012, 0.1, bone, Math.sin(a) * 0.09, -0.235, Math.cos(a) * 0.075, hand, 5);
+        claw.rotation.x = 0.95;
+        claw.rotation.z = -a * 0.5;
       }
       arms[sx < 0 ? "L" : "R"] = shoulder;
       shoulder.rotation.z = -sx * 0.1;
@@ -4139,6 +4357,27 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     skull.scale.set(1, 1.2, 0.95);
     const muzzle = bx(0.17, 0.19, 0.22, skinD, 0, -0.14, 0.1, head);
     muzzle.rotation.x = 0.1;
+    /* brow ridge, cheekbones and hollow sockets so the face is not a ball */
+    const brow = bx(0.2, 0.045, 0.06, skinD, 0, 0.055, 0.16, head);
+    brow.rotation.x = -0.18;
+    for (const sx of [-1, 1]) {
+      const cheek = sp(0.055, skin, sx * 0.082, -0.075, 0.1, head);
+      cheek.scale.set(0.9, 0.8, 1.2);
+      const socket = sp(0.052, 0x07070a, sx * 0.075, 0.018, 0.15, head);
+      socket.scale.set(1, 0.9, 0.5);
+      /* ear stubs swept back */
+      const ear = cy(0.02, 0.035, 0.16, skinD, sx * 0.13, 0.03, -0.03, head, 5);
+      ear.rotation.z = sx * 1.15;
+      ear.rotation.x = -0.5;
+    }
+    /* a few matted strands hanging off the skull */
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * PI * 2;
+      const h = 0.16 + R() * 0.22;
+      const strand = cy(0.004, 0.012, h, 0x1a1712, Math.cos(a) * 0.14, -0.1 - h * 0.4, Math.sin(a) * 0.12 - 0.04, head, 4);
+      strand.rotation.z = (R() - 0.5) * 0.5;
+      strand.rotation.x = (R() - 0.5) * 0.4;
+    }
     const jaw = new THREE.Group();
     jaw.position.set(0, -0.18, 0.05);
     head.add(jaw);
@@ -4223,13 +4462,19 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       const hip = new THREE.Group();
       hip.position.set(x, y, z);
       g.add(hip);
-      const up = cy(r * 0.9, r, len * 0.55, col, 0, -len * 0.27, 0, hip, 6);
+      /* shoulder mass, tapered upper and lower leg, cloven hoof */
+      sp(r * 1.5, col, 0, 0, 0, hip).scale.set(1, 0.9, 0.95);
+      cy(r * 0.72, r * 1.02, len * 0.56, col, 0, -len * 0.28, 0, hip, 7);
       const kn = new THREE.Group();
-      kn.position.y = -len * 0.55;
+      kn.position.y = -len * 0.56;
       hip.add(kn);
-      cy(r * 0.7, r * 0.85, len * 0.45, col, 0, -len * 0.22, 0, kn, 6);
-      bx(r * 2.1, len * 0.12, r * 3.0, 0x2a2420, 0, -len * 0.45, r * 0.6, kn);
+      sp(r * 0.82, col, 0, 0, 0, kn);
+      cy(r * 0.46, r * 0.74, len * 0.4, col, 0, -len * 0.2, 0, kn, 6);
+      bx(r * 1.75, len * 0.1, r * 2.1, 0x24201c, 0, -len * 0.4, r * 0.5, kn);
+      for (const sd of [-1, 1])
+        bx(r * 0.68, len * 0.09, r * 1.35, 0x14110e, sd * r * 0.42, -len * 0.43, r * 0.9, kn);
       hip.rotation.z = tilt || 0;
+      kn.rotation.z = -(tilt || 0) * 0.6;
       return { hip: hip, kn: kn };
     };
     if (kind === 0) {
@@ -7512,7 +7757,7 @@ It opens by itself. Do not leave the laptop running.
 
   /* ---------- grain / resize ---------- */
   const gc = $("grain").getContext("2d"),
-    gimg = gc.createImageData(280, 160);
+    gimg = gc.createImageData(140, 80);
   let gframe = 0;
   function grain() {
     const d = gimg.data;
@@ -7523,13 +7768,31 @@ It opens by itself. Do not leave the laptop running.
     }
     gc.putImageData(gimg, 0, 0);
   }
+  /* Adaptive resolution: if the machine cannot hold the frame rate we drop
+     the render scale in steps instead of letting the game crawl. */
+  const perf = { acc: 0, n: 0, scale: 1 };
+  function applyScale() {
+    const cap = G.qual === "high" ? (innerWidth < 760 ? 1.3 : 1.8) : 0.8;
+    const pr = Math.max(0.62, Math.min(devicePixelRatio || 1, cap) * perf.scale);
+    rd.setPixelRatio(pr);
+    rd.setSize(W, H, false);
+  }
+  function autoQuality(dt) {
+    perf.acc += dt;
+    perf.n++;
+    if (perf.acc < 1.4) return;
+    const fps = perf.n / perf.acc;
+    perf.acc = 0;
+    perf.n = 0;
+    const before = perf.scale;
+    if (fps < 42 && perf.scale > 0.64) perf.scale = Math.max(0.64, perf.scale - 0.14);
+    else if (fps > 56 && perf.scale < 1) perf.scale = Math.min(1, perf.scale + 0.07);
+    if (perf.scale !== before) applyScale();
+  }
   function resize() {
     W = innerWidth;
     H = innerHeight;
-    const cap = G.qual === "high" ? (innerWidth < 760 ? 1.3 : 1.8) : 0.8;
-    const pr = Math.min(devicePixelRatio || 1, cap);
-    rd.setPixelRatio(pr);
-    rd.setSize(W, H, false);
+    applyScale();
     cam.aspect = W / H;
     cam.updateProjectionMatrix();
     $("grain").style.opacity = G.qual === "high" ? 0.034 : 0.024;
@@ -7611,6 +7874,7 @@ It opens by itself. Do not leave the laptop running.
       subTick();
       A.amb(dt);
       envTick(dt);
+      autoQuality(dt);
       /* the moon shadow frustum follows the player so nearby trees still cast */
       sun.position.set(cam.position.x + 26, cam.position.y + 42, cam.position.z - 18);
       sunTarget.position.set(cam.position.x, cam.position.y - 1, cam.position.z);
