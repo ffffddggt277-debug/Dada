@@ -1775,8 +1775,10 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       output = 0.19 + 0.67 * k;
       if (t % 1.37 < 0.055 || (k < 0.45 && t % 2.21 < 0.16)) output *= 0.08;
     }
-    fl.intensity = 4.0 * output;
-    flF.intensity = 0.6 * output;
+    /* the spot falls off almost flat over its whole reach, so 4.0 clipped
+       every surface within ten metres to white plaster */
+    fl.intensity = 1.9 * output;
+    flF.intensity = 0.3 * output;
   }
   function setFlash(v) {
     if (v && !G.charge) {
@@ -2015,12 +2017,21 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     (g, w, h) => {
       /* near-white base: the mesh colour tints it, so the paint still matches
          the rest of the shell */
-      const grd = g.createLinearGradient(0, 0, 0, h);
-      grd.addColorStop(0, "#f4f1e8");
-      grd.addColorStop(0.55, "#e6e2d6");
-      grd.addColorStop(1, "#cfc8b6");
-      g.fillStyle = grd;
+      g.fillStyle = "#bcb5a5";
       g.fillRect(0, 0, w, h);
+      /* an even base: every face starts its UVs at 0, so a vertical gradient
+         made narrow bands sample the light top and read as bare white */
+      for (let i = 0; i < 140; i++) {
+        const x = R() * w,
+          y = R() * h,
+          r = 14 + R() * 62,
+          d = R() > 0.5;
+        const rad = g.createRadialGradient(x, y, 0, x, y, r);
+        rad.addColorStop(0, d ? "rgba(96,88,72,.14)" : "rgba(226,220,204,.12)");
+        rad.addColorStop(1, "rgba(0,0,0,0)");
+        g.fillStyle = rad;
+        g.fillRect(x - r, y - r, r * 2, r * 2);
+      }
       /* brushed aluminium grain */
       for (let i = 0; i < 900; i++) {
         const y = R() * h,
@@ -3102,16 +3113,16 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     /* The old body was one solid box. Every face pointed outwards, so standing
        inside you looked straight through the wall into the forest. The shell is
        separate panels now and the interior is built from the floor up. */
-    const SKIN = 0xb2ab9a,
-      SKIN_D = 0x8d8679,
-      TRIM = 0x6a6459,
-      METAL = 0x9d988c,
-      CAB = 0xa7a193;
+    const SKIN = 0x7d7464,
+      SKIN_D = 0x5b5648,
+      TRIM = 0x423d35,
+      METAL = 0x87837a,
+      CAB = 0x6e6757;
     const F = 0.86; /* interior floor */
     const glassMat = new THREE.MeshLambertMaterial({
-      color: 0x243a38,
+      color: 0x1c2a29,
       transparent: true,
-      opacity: 0.34,
+      opacity: 0.46,
       side: THREE.DoubleSide,
     });
     const glazing = (w, h, x, y, z) => {
@@ -3134,7 +3145,7 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     ].forEach((w) => {
       const tyre = cy(0.56, 0.56, 0.34, 0x14171a, w[0], 0.58, w[1], rv, 16);
       tyre.rotation.x = PI / 2;
-      const hub = cy(0.27, 0.27, 0.36, 0x8b877c, w[0], 0.58, w[1], rv, 12);
+      const hub = cy(0.27, 0.27, 0.36, 0x6b6860, w[0], 0.58, w[1], rv, 12);
       hub.rotation.x = PI / 2;
       cy(0.1, 0.1, 0.38, 0x5d5a52, w[0], 0.58, w[1], rv, 10).rotation.x = PI / 2;
       bx(0.12, 0.5, 0.66, 0x1d1c1a, w[0], 0.52, w[1] * 1.16, rv);
@@ -3157,10 +3168,11 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     bx(4.14, 0.76, 0.08, SKIN, -1.01, 2.24, -1.2, rv);
     bx(0.94, 0.76, 0.08, SKIN, 2.61, 2.24, -1.2, rv);
     /* painted coach stripe: the flat shell reads as a box without it */
-    for (const z of [1.206, -1.206]) {
-      bx(6.02, 0.12, 0.014, 0x6d3a2e, -0.06, 1.4, z, rv);
-      bx(6.02, 0.035, 0.014, 0xb9ad90, -0.06, 1.475, z, rv);
-      bx(6.02, 0.05, 0.014, 0x5c3227, -0.06, 1.34, z, rv);
+    /* the stripe has to sit ON the outer skin, otherwise it is buried in it */
+    for (const z of [1.247, -1.247]) {
+      bx(6.02, 0.14, 0.02, 0x8a4030, -0.06, 1.4, z, rv);
+      bx(6.02, 0.035, 0.02, 0xcfc2a0, -0.06, 1.492, z, rv);
+      bx(6.02, 0.05, 0.02, 0x5c2a1f, -0.06, 1.33, z, rv);
     }
     /* rear wall + front bulkhead with a curtained cab opening */
     bx(0.08, 2.16, 2.44, SKIN_D, 3.08, 1.94, 0, rv);
@@ -3175,8 +3187,8 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     bx(6.1, 0.06, 2.36, 0x9b927f, 0, 2.96, 0, rv);
     for (let i = -3; i <= 3; i++) bx(0.06, 0.05, 2.3, 0x7c7465, i * 0.82, 2.92, 0, rv);
     bx(6.24, 0.14, 2.54, SKIN_D, 0, 3.06, 0, rv);
-    bx(6.24, 0.08, 0.1, 0xb0aa9a, 0, 3.12, 1.2, rv);
-    bx(6.24, 0.08, 0.1, 0xb0aa9a, 0, 3.12, -1.2, rv);
+    bx(6.24, 0.08, 0.1, 0x736d5e, 0, 3.12, 1.2, rv);
+    bx(6.24, 0.08, 0.1, 0x736d5e, 0, 3.12, -1.2, rv);
     /* windows: frames, sills, glass, curtains */
     [[-2.0, 1.4], [0.35, 1.2]].forEach((q) => {
       const wx = q[0],
@@ -3185,17 +3197,17 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       bx(ww + 0.16, 0.07, 0.11, TRIM, wx, 1.86, 1.2, rv);
       bx(0.07, 0.83, 0.11, TRIM, wx - ww / 2 - 0.04, 2.24, 1.2, rv);
       bx(0.07, 0.83, 0.11, TRIM, wx + ww / 2 + 0.04, 2.24, 1.2, rv);
-      bx(ww + 0.1, 0.09, 0.16, 0x7a7164, wx, 1.8, 1.18, rv);
+      bx(ww + 0.1, 0.09, 0.16, 0x625b50, wx, 1.8, 1.18, rv);
       glazing(ww - 0.06, 0.7, wx, 2.24, 1.245);
       bx(0.02, 0.66, 0.06, TRIM, wx, 2.24, 1.25, rv);
-      bx(0.5, 0.8, 0.03, 0x63363a, wx - ww / 2 + 0.26, 2.25, 1.19, rv);
-      bx(0.5, 0.8, 0.03, 0x63363a, wx + ww / 2 - 0.26, 2.25, 1.19, rv);
+      bx(0.5, 0.8, 0.03, 0x402325, wx - ww / 2 + 0.26, 2.25, 1.19, rv);
+      bx(0.5, 0.8, 0.03, 0x402325, wx + ww / 2 - 0.26, 2.25, 1.19, rv);
     });
     bx(1.18, 0.07, 0.11, TRIM, 1.6, 2.62, -1.2, rv);
     bx(1.18, 0.07, 0.11, TRIM, 1.6, 1.86, -1.2, rv);
     bx(0.07, 0.83, 0.11, TRIM, 1.02, 2.24, -1.2, rv);
     bx(0.07, 0.83, 0.11, TRIM, 2.18, 2.24, -1.2, rv);
-    bx(1.1, 0.09, 0.16, 0x7a7164, 1.6, 1.8, -1.18, rv);
+    bx(1.1, 0.09, 0.16, 0x625b50, 1.6, 1.8, -1.18, rv);
     glazing(1.02, 0.7, 1.6, 2.24, -1.245);
     bx(0.02, 0.66, 0.06, TRIM, 1.6, 2.24, -1.25, rv);
     /* ---- doorway -------------------------------------------------------- */
@@ -3204,21 +3216,22 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     bx(0.1, 1.9, 0.13, TRIM, 2.34, 1.78, 1.2, rv);
     bx(1.1, 0.08, 0.2, 0x6a6459, 1.8, F - 0.01, 1.2, rv);
     const doorG = new THREE.Group();
-    doorG.position.set(1.32, F, 1.16);
+    doorG.position.set(1.32, F, 1.195);
     rv.add(doorG);
     bx(0.98, 1.8, 0.06, 0x8c8678, 0.5, 0.9, 0, doorG);
     bx(0.74, 0.66, 0.03, 0x18242a, 0.5, 1.46, 0.045, doorG);
     bx(0.74, 0.1, 0.03, 0x2c3a40, 0.5, 1.0, 0.045, doorG);
     bx(0.07, 0.05, 0.06, 0xc8b070, 0.92, 0.92, 0.07, doorG);
     bx(0.05, 0.16, 0.05, 0x4a443c, 0.08, 0.96, 0.02, doorG);
-    doorG.rotation.y = -0.66;
+    /* shut: an open door read as a loose panel hanging off the side */
+    doorG.rotation.y = 0;
     bx(0.5, 0.05, 0.5, 0x5a5852, 1.8, 0.42, 1.5, rv);
     bx(0.5, 0.32, 0.06, 0x5a5852, 1.8, 0.28, 1.75, rv);
     bx(0.16, 0.1, 0.12, 0xffe9b0, 2.42, 2.2, 1.24, rv, 1);
     sprite(glowAmber, 0.5, 2.42, 2.2, 1.3, rv, 0.5);
     /* ---- cab, glass, lights -------------------------------------------- */
     bx(1.7, 1.84, 2.4, CAB, -3.8, 1.47, 0, rv);
-    bx(1.5, 0.42, 2.2, 0xa19b8d, -3.9, 2.56, 0, rv);
+    bx(1.5, 0.42, 2.2, 0x7f7869, -3.9, 2.56, 0, rv);
     bx(2.4, 0.34, 2.5, CAB, -4.1, 0.62, 0, rv);
     const shield = bx(0.06, 1.06, 2.16, 0x223a3a, -4.68, 1.92, 0, rv);
     shield.material = glassMat.clone();
@@ -3245,13 +3258,20 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       bx(0.06, 0.5, 0.05, 0x26272a, w[0] + 0.52, 0.9, w[1] * 1.1, rv);
       bx(0.06, 0.5, 0.05, 0x26272a, w[0] - 0.52, 0.9, w[1] * 1.1, rv);
       bx(0.34, 0.3, 0.03, 0x1d1e20, w[0], 0.38, w[1] * 1.14, rv);
+      /* fender flare: without an arch the wheel looks glued to a flat wall */
+      const arch = new THREE.Mesh(
+        new THREE.TorusGeometry(0.63, 0.075, 6, 14, PI),
+        M(0x2c2924),
+      );
+      arch.position.set(w[0], 0.58, w[1] * 1.13);
+      rv.add(arch);
     }
     bx(3.4, 0.12, 0.08, 0x6a6459, -1.2, 0.72, 1.24, rv);
     bx(3.4, 0.12, 0.08, 0x6a6459, -1.2, 0.72, -1.24, rv);
     /* side locker hatches with hinges and catches */
     for (const q of [[-0.4, 1.0], [1.5, 0.7]]) {
-      bx(q[1], 0.5, 0.04, 0x8a8376, q[0], 1.5, 1.225, rv);
-      bx(q[1] + 0.05, 0.04, 0.055, 0x5f5a50, q[0], 1.77, 1.23, rv);
+      bx(q[1], 0.5, 0.04, 0x605a4e, q[0], 1.5, 1.225, rv);
+      bx(q[1] + 0.05, 0.04, 0.055, 0x4d483f, q[0], 1.77, 1.23, rv);
       bx(0.05, 0.06, 0.055, 0x4a463d, q[0] + q[1] / 2 - 0.07, 1.5, 1.24, rv);
       bx(0.08, 0.03, 0.045, 0x3a3833, q[0] + q[1] / 2 - 0.07, 1.53, 1.245, rv);
     }
@@ -3286,15 +3306,15 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       refl.material = new THREE.MeshBasicMaterial({ color: 0xb04a28 });
     }
     /* roof: air conditioner, vents, aerial */
-    bx(0.86, 0.28, 0.66, 0xb8b2a4, 0.2, 3.26, 0, rv);
-    bx(0.7, 0.05, 0.5, 0x6a6458, 0.2, 3.42, 0, rv);
+    bx(0.86, 0.28, 0.66, 0x9d988b, 0.2, 3.26, 0, rv);
+    bx(0.7, 0.05, 0.5, 0x5f5a4e, 0.2, 3.42, 0, rv);
     for (const x of [-1.6, 1.7]) {
-      cy(0.11, 0.13, 0.09, 0x8f8a80, x, 3.18, 0.5, rv, 10);
+      cy(0.11, 0.13, 0.09, 0x7e7a71, x, 3.18, 0.5, rv, 10);
       cy(0.08, 0.08, 0.05, 0x2a2a2a, x, 3.23, 0.5, rv, 8);
     }
     cy(0.012, 0.012, 1.4, 0x9a9a9a, 3.0, 3.9, -0.7, rv, 5);
     /* propane tank and leveling jack under the floor */
-    const tank = cy(0.19, 0.19, 0.78, 0xd0c8b4, -1.9, 0.44, -1.4, rv, 14);
+    const tank = cy(0.19, 0.19, 0.78, 0xa9a290, -1.9, 0.44, -1.4, rv, 14);
     tank.rotation.x = PI / 2;
     cy(0.04, 0.04, 0.12, 0x8a8478, -1.9, 0.44, -1.86, rv, 8).rotation.x = PI / 2;
     bx(0.9, 0.12, 0.12, 0x3a3833, -1.9, 0.34, -1.28, rv);
