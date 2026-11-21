@@ -2501,6 +2501,8 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       }
       const gg = g.index ? g.toNonIndexed() : g.clone();
       gg.applyMatrix4(tmp.multiplyMatrices(inv, o.matrixWorld));
+      /* keep this part's own colour: the merged mesh is painted per vertex */
+      gg.userData.bakeCol = m.color ? m.color.clone() : new THREE.Color(0xffffff);
       grp.geos.push(gg);
       drop.push(o);
     });
@@ -2521,11 +2523,12 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
         pos.set(g.attributes.position.array.subarray(0, n * 3), off * 3);
         if (g.attributes.normal) nor.set(g.attributes.normal.array.subarray(0, n * 3), off * 3);
         if (g.attributes.uv) uv.set(g.attributes.uv.array.subarray(0, n * 2), off * 2);
-        if (col && c) {
+        if (col) {
+          const gc = g.userData.bakeCol || c || { r: 1, g: 1, b: 1 };
           for (let i = 0; i < n; i++) {
-            col[(off + i) * 3] = c.r;
-            col[(off + i) * 3 + 1] = c.g;
-            col[(off + i) * 3 + 2] = c.b;
+            col[(off + i) * 3] = gc.r;
+            col[(off + i) * 3 + 1] = gc.g;
+            col[(off + i) * 3 + 2] = gc.b;
           }
         }
         off += n;
