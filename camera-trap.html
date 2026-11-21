@@ -1678,12 +1678,12 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
   sun.position.set(30, 50, -20);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
-  sun.shadow.camera.left = -44;
-  sun.shadow.camera.right = 44;
-  sun.shadow.camera.top = 44;
-  sun.shadow.camera.bottom = -44;
+  sun.shadow.camera.left = -30;
+  sun.shadow.camera.right = 30;
+  sun.shadow.camera.top = 30;
+  sun.shadow.camera.bottom = -30;
   sun.shadow.camera.near = 1;
-  sun.shadow.camera.far = 190;
+  sun.shadow.camera.far = 90;
   sun.shadow.bias = -0.0006;
   sun.shadow.normalBias = 0.035;
   sc.add(sun);
@@ -2008,6 +2008,51 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       }
     }
   });
+  /* painted aluminium coachwork: brushed streaks, rivets and grime */
+  const rvTex = ptex(
+    256,
+    256,
+    (g, w, h) => {
+      g.fillStyle = "#d6d2ca";
+      g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 220; i++) {
+        const y = R() * h,
+          l = 10 + R() * 90,
+          x = R() * w,
+          v = 170 + Math.floor(R() * 70);
+        g.strokeStyle = "rgba(" + v + "," + v + "," + (v - 6) + ",.35)";
+        g.lineWidth = 0.6 + R() * 1.2;
+        g.beginPath();
+        g.moveTo(x, y);
+        g.lineTo(x + l, y + (R() - 0.5) * 2);
+        g.stroke();
+      }
+      for (let i = 0; i < 22; i++) {
+        const x = R() * w,
+          y = R() * h,
+          r = 10 + R() * 40;
+        const gr = g.createRadialGradient(x, y, 0, x, y, r);
+        gr.addColorStop(0, "rgba(120,116,102,.16)");
+        gr.addColorStop(1, "rgba(0,0,0,0)");
+        g.fillStyle = gr;
+        g.fillRect(x - r, y - r, r * 2, r * 2);
+      }
+      g.fillStyle = "rgba(96,94,86,.16)";
+      for (let i = 0; i < 3; i++)
+        for (let k = 0; k < 18; k++) {
+          g.beginPath();
+          g.arc(12 + k * 13.5, 24 + i * 84, 1.1, 0, 6.3);
+          g.fill();
+        }
+      speck(g, w, h, 700, (g, x, y, r) => {
+        const v = 60 + Math.floor(R() * 90);
+        g.fillStyle = "rgba(" + v + "," + v + "," + (v - 6) + ",.3)";
+        g.fillRect(x, y, r * 0.7, r * 0.7);
+      });
+    },
+    2,
+    2,
+  );
   const MC = new Map();
   function TM(c, tex, opts) {
     /* Lambert: the forest has to stay cheap enough to render at speed */
@@ -2027,8 +2072,8 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     }
     return MC.get(k);
   }
-  function bx(w, h, d, c, x, y, z, p, e) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), M(c, e));
+  function bx(w, h, d, c, x, y, z, p, e, mat) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat || M(c, e));
     m.position.set(x, y, z);
     (p || sc).add(m);
     return m;
@@ -2445,14 +2490,14 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     geo.computeVertexNormals();
     const floor = new THREE.Mesh(
       geo,
-      new THREE.MeshStandardMaterial({ vertexColors: true, map: groundTex, roughness: 1 }),
+      new THREE.MeshLambertMaterial({ vertexColors: true, map: groundTex }),
     );
     floor.receiveShadow = true;
     sc.add(floor);
     /* road: the corridor is flattened by terrainH, so it stays level */
     const road = new THREE.Mesh(
       new THREE.PlaneGeometry(7.4, 430),
-      new THREE.MeshStandardMaterial({ color: 0x4a4330, map: dirtTex, roughness: 1 }),
+      new THREE.MeshLambertMaterial({ color: 0x4a4330, map: dirtTex }),
     );
     road.rotation.x = -PI / 2;
     road.position.set(10, 0.02, 0);
@@ -2470,7 +2515,7 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     sc.add(crown);
     const camp = new THREE.Mesh(
       new THREE.CircleGeometry(14, 30),
-      new THREE.MeshStandardMaterial({ color: 0x2a3a26, map: groundTex, roughness: 1 }),
+      new THREE.MeshLambertMaterial({ color: 0x2a3a26, map: groundTex }),
     );
     camp.rotation.x = -PI / 2;
     camp.position.set(0, 0.031, 0);
@@ -2506,23 +2551,19 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
         z = t[1] + (t[3] - t[1]) * k + (R() - 0.5) * 3.2;
       return { x, z, y: terrainH(x, z) + 0.02, s: 0.35 + R() * 0.8, ry: R() * PI };
     });
-    const grassMat = new THREE.MeshStandardMaterial({
+    const grassMat = new THREE.MeshLambertMaterial({
       map: grassTex,
       alphaTest: 0.42,
       side: THREE.DoubleSide,
-      roughness: 1,
-      metalness: 0,
       /* a faint self-lit floor keeps the blades from turning into black
          shards once the moon is the only light left */
       emissive: 0x0b1a12,
       emissiveIntensity: 0.2,
     });
-    const fernMat = new THREE.MeshStandardMaterial({
+    const fernMat = new THREE.MeshLambertMaterial({
       map: fernTex,
       alphaTest: 0.42,
       side: THREE.DoubleSide,
-      roughness: 1,
-      metalness: 0,
       emissive: 0x09150f,
       emissiveIntensity: 0.18,
     });
@@ -2658,7 +2699,7 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       new THREE.InstancedMesh(GEO.coneC, needleMat, spruce.length),
       new THREE.InstancedMesh(raggedCone(0.95, 2.9, 8, 1, 0.28), needleMat, spruce.length),
     ];
-    const whorls = new THREE.InstancedMesh(GEO.branch, TM(0x6b5236, barkTex), spruce.length * 3);
+    const whorls = new THREE.InstancedMesh(GEO.branch, TM(0x6b5236, barkTex), spruce.length * 2);
     let wi = 0;
     spruce.forEach((p, i) => {
       trees.push({ x: p.x, z: p.z, r: 0.42 * p.s });
@@ -2678,7 +2719,7 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
         _ic.setHSL(0.325 + R() * 0.045, 0.32 + li * 0.01, 0.075 + li * 0.008 + R() * 0.05);
         layer.setColorAt(i, _ic);
       });
-      for (let k = 0; k < 3; k++) {
+      for (let k = 0; k < 2; k++) {
         const a = p.rot + k * 2.09 + R() * 0.4;
         _ie.set(0, -a, 1.18 + R() * 0.18);
         _iq.setFromEuler(_ie);
@@ -3391,7 +3432,7 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       dashCol = 0x24262a,
       trimCol = 0x38332c,
       chrome = 0x9aa0a2;
-    const dashMat = new THREE.MeshStandardMaterial({ color: 0x1d1f23, map: vinylTex, roughness: 0.9 });
+    const dashMat = new THREE.MeshLambertMaterial({ color: 0x1d1f23, map: vinylTex });
     /* dash body, padded top and a proper binnacle over the dials */
     bx(0.16, 0.56, 2.14, dashCol, -4.52, 1.36, 0, rv);
     bx(0.46, 0.1, 2.2, 0x2a2c30, -4.56, 1.61, 0, rv);
@@ -3455,11 +3496,10 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     rv.add(gauge);
     const gaugeGlass = new THREE.Mesh(
       new THREE.PlaneGeometry(0.3, 0.15),
-      new THREE.MeshStandardMaterial({
+      new THREE.MeshLambertMaterial({
         color: 0x9fb4ac,
         transparent: true,
         opacity: 0.13,
-        roughness: 0.15,
       }),
     );
     gaugeGlass.position.set(-4.36, 1.715, 0.55);
@@ -3499,7 +3539,7 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       g.rotation.z = ang;
       wheelSpin.add(g);
       const b = bx(len, w, 0.022, 0x26282c, len / 2 + 0.05, 0, 0, g);
-      b.material = new THREE.MeshStandardMaterial({ color: 0x2a2c30, roughness: 0.64 });
+      b.material = new THREE.MeshLambertMaterial({ color: 0x2a2c30 });
       return b;
     };
     spoke(0, 0.09, 0.042);
@@ -3600,7 +3640,7 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     /* ---- hands and a Nokia 3310 for the opening scene ------------------- */
     const skin = new THREE.MeshLambertMaterial({ color: 0x1e1811 });
     const skinTop = new THREE.MeshLambertMaterial({ color: 0x2b231a });
-    const jacket = new THREE.MeshStandardMaterial({ color: 0x3c4a43, roughness: 0.95 });
+    const jacket = new THREE.MeshLambertMaterial({ color: 0x3c4a43 });
     /* A gloved hand gripping the rim.  Built from a palm mass, a knuckle
        ridge, four three-segment fingers that curl over the rim, a two
        segment thumb and a cuff heading down out of frame: the silhouette
@@ -3692,7 +3732,7 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     rv.add(phone);
     const body = new THREE.Mesh(
       new THREE.BoxGeometry(0.058, 0.122, 0.026),
-      new THREE.MeshStandardMaterial({ color: 0x1b2b45, roughness: 0.55, metalness: 0.1 }),
+      new THREE.MeshLambertMaterial({ color: 0x1b2b45 }),
     );
     phone.add(body);
     bx(0.032, 0.01, 0.02, 0x101827, 0, 0.066, 0, phone);
@@ -3722,12 +3762,26 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     };
     rv.userData.introRig = [handL, handR, handP, phone, phoneGlow];
     rv.userData.hl = [hl1, hl2];
+    /* interior lamps are only switched into the light list while inside:
+       every light left in the scene costs every vertex in every shader */
+    rv.userData.insideLights = [lamp, galleyLight, bedLight, lapGlow, dashLight];
     rv.userData.lamp = shade;
     rv.traverse((o) => {
       if (o.isMesh) {
         o.castShadow = true;
         o.receiveShadow = false;
       }
+    });
+    /* the painted shell gets a brushed, riveted skin so it reads as a
+       vehicle instead of bare cardboard */
+    const skinTexMat = TM(SKIN, rvTex),
+      skinDMat = TM(SKIN_D, rvTex),
+      cabTexMat = TM(CAB, rvTex);
+    rv.traverse((o) => {
+      if (!o.isMesh) return;
+      if (o.material === M(SKIN)) o.material = skinTexMat;
+      else if (o.material === M(SKIN_D)) o.material = skinDMat;
+      else if (o.material === M(CAB)) o.material = cabTexMat;
     });
     /* flatten the small live sub-trees first: each group keeps its own
        transform, but its 20-odd boxes become one or two meshes. */
@@ -3739,6 +3793,89 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     /* then everything static in the shell: ~380 draw calls become a handful */
     bakeStatic(rv, [steer, doorG, box, shade, handL, handR, handP, phone], "rv");
   })();
+
+  /* ---------- hand torch: the light now comes out of a real flashlight ---- */
+  const torchG = new THREE.Group();
+  torchG.position.set(0.192, -0.2, -0.52);
+  torchG.rotation.set(0.02, 0.13, -0.12);
+  torchG.scale.setScalar(0.88);
+  cam.add(torchG);
+  (function buildTorch() {
+    const metal = new THREE.MeshLambertMaterial({ color: 0xa9afb5 });
+    const shell = new THREE.MeshLambertMaterial({ color: 0x32363b });
+    const rubber = new THREE.MeshLambertMaterial({ color: 0x121416 });
+    const glove = new THREE.MeshLambertMaterial({ color: 0x1a1410 });
+    const gloveTop = new THREE.MeshLambertMaterial({ color: 0x231b14 });
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.027, 0.031, 0.2, 12), shell);
+    barrel.rotation.x = -PI / 2;
+    barrel.position.set(0, 0, -0.02);
+    torchG.add(barrel);
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.1, 12), rubber);
+    grip.rotation.x = -PI / 2;
+    grip.position.set(0, 0, 0.05);
+    torchG.add(grip);
+    for (let i = 0; i < 5; i++) {
+      const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, 0.007, 12), glove);
+      ring.rotation.x = PI / 2;
+      ring.position.set(0, 0, 0.012 + i * 0.016);
+      torchG.add(ring);
+    }
+    const head = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.033, 0.08, 14), metal);
+    head.rotation.x = -PI / 2;
+    head.position.set(0, 0, -0.16);
+    torchG.add(head);
+    const bezel = new THREE.Mesh(new THREE.CylinderGeometry(0.054, 0.05, 0.014, 14), rubber);
+    bezel.rotation.x = -PI / 2;
+    bezel.position.set(0, 0, -0.2);
+    torchG.add(bezel);
+    const lensMat = new THREE.MeshBasicMaterial({ color: 0xfff2cc });
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(0.046, 16), lensMat);
+    lens.position.set(0, 0, -0.207);
+    lens.rotation.y = PI;
+    torchG.add(lens);
+    bx(0.02, 0.012, 0.032, 0x3c4147, 0, 0.03, -0.06, torchG);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.015, 0.0035, 6, 10), metal);
+    ring.rotation.y = PI / 2;
+    ring.position.set(0, 0, 0.105);
+    torchG.add(ring);
+    /* gloved fist wrapped round the grip */
+    const palm = new THREE.Mesh(new THREE.SphereGeometry(0.042, 12, 9), gloveTop);
+    palm.scale.set(0.92, 1.08, 0.8);
+    palm.position.set(0.006, -0.012, 0.045);
+    torchG.add(palm);
+    for (let i = 0; i < 4; i++) {
+      const f = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.0118, 0.052, 7), glove);
+      f.rotation.z = PI / 2.1;
+      f.position.set(-0.03, 0.022 - i * 0.021, 0.045);
+      torchG.add(f);
+    }
+    const thumb = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.013, 0.046, 7), gloveTop);
+    thumb.rotation.z = 1.05;
+    thumb.position.set(0.03, 0.024, 0.03);
+    torchG.add(thumb);
+    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.041, 0.036, 0.055, 10), glove);
+    cuff.rotation.z = 0.28;
+    cuff.position.set(0.022, -0.072, 0.06);
+    torchG.add(cuff);
+    /* a soft additive cone so the beam is visible in the dust */
+    const beamMat = new THREE.MeshBasicMaterial({
+      color: 0xffe9c0,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const beam = new THREE.Mesh(new THREE.ConeGeometry(0.5, 3.4, 14, 1, true), beamMat);
+    beam.rotation.x = -PI / 2;
+    beam.position.set(0, 0, -1.9);
+    torchG.add(beam);
+    torchG.userData = { lensMat: lensMat, beamMat: beamMat, beam: beam };
+  })();
+  /* the beam starts at the lens, not at the centre of the eyes */
+  fl.position.set(0.192, -0.2, -0.72);
+  fl.target.position.set(0.16, -0.34, -10);
+  flF.position.set(0.192, -0.2, -0.58);
 
   /* fire */
   const fireG = new THREE.Group();
@@ -7772,8 +7909,8 @@ It opens by itself. Do not leave the laptop running.
      the render scale in steps instead of letting the game crawl. */
   const perf = { acc: 0, n: 0, scale: 1 };
   function applyScale() {
-    const cap = G.qual === "high" ? (innerWidth < 760 ? 1.3 : 1.8) : 0.8;
-    const pr = Math.max(0.62, Math.min(devicePixelRatio || 1, cap) * perf.scale);
+    const cap = G.qual === "high" ? (innerWidth < 760 ? 1.05 : 1.4) : 0.75;
+    const pr = Math.max(0.5, Math.min(devicePixelRatio || 1, cap) * perf.scale);
     rd.setPixelRatio(pr);
     rd.setSize(W, H, false);
   }
@@ -7785,9 +7922,14 @@ It opens by itself. Do not leave the laptop running.
     perf.acc = 0;
     perf.n = 0;
     const before = perf.scale;
-    if (fps < 42 && perf.scale > 0.64) perf.scale = Math.max(0.64, perf.scale - 0.14);
+    if (fps < 42 && perf.scale > 0.52) perf.scale = Math.max(0.52, perf.scale - 0.14);
     else if (fps > 56 && perf.scale < 1) perf.scale = Math.min(1, perf.scale + 0.07);
     if (perf.scale !== before) applyScale();
+    /* still crawling at the floor: give up the shadow pass as well */
+    if (fps < 30 && perf.scale <= 0.54 && rd.shadowMap.enabled) {
+      rd.shadowMap.enabled = false;
+      sun.castShadow = false;
+    }
   }
   function resize() {
     W = innerWidth;
@@ -7879,7 +8021,7 @@ It opens by itself. Do not leave the laptop running.
       sun.position.set(cam.position.x + 26, cam.position.y + 42, cam.position.z - 18);
       sunTarget.position.set(cam.position.x, cam.position.y - 1, cam.position.z);
       if (G.qual === "high") {
-        rd.shadowMap.needsUpdate = ++gframe % 6 === 0;
+        rd.shadowMap.needsUpdate = ++gframe % 10 === 0;
         if (rd.shadowMap.needsUpdate) rd.shadowMap.autoUpdate = false;
       }
       if (G.inside) sc.fog.density *= 0.14;
@@ -7974,6 +8116,26 @@ It opens by itself. Do not leave the laptop running.
           });
       }
       if (rv.userData.lamp) rv.userData.lamp.rotation.z = Math.sin(G.time * 0.8) * 0.02;
+      /* real flashlight in the hand: beam follows it, so does its glow */
+      const tu = torchG.userData;
+      if (tu) {
+        const lift = Math.sin(G.time * 1.6) * 0.004,
+          bob = Math.sin(G.time * 2.4) * 0.003;
+        torchG.position.set(0.192 + lift, -0.2 + bob, -0.52);
+        torchG.rotation.z = -0.1 + Math.sin(G.time * 1.2) * 0.01;
+        tu.lensMat.color.setHex(G.flash ? 0xfff6d8 : 0x35352f);
+        tu.beam.visible = !!G.flash;
+        tu.beamMat.opacity = G.flash ? 0.085 : 0;
+      }
+      /* only the lights the current scene needs stay in the shader */
+      if (rv.userData.insideLights) {
+        const onIn = !!G.inside;
+        rv.userData.insideLights.forEach((l) => {
+          if (l.visible !== onIn) l.visible = onIn;
+        });
+      }
+      if (fireLight.visible !== !!G.lit) fireLight.visible = !!G.lit;
+      if (pentaLight.visible !== penta.visible) pentaLight.visible = penta.visible;
       animals.forEach((a, i) => {
         if (a.visible) a.rotation.z = Math.sin(G.time * 1.2 + i * 2) * 0.008;
       });
