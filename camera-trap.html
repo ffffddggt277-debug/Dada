@@ -47,6 +47,13 @@ color:var(--moon);background:rgba(6,13,10,.88);border:1px solid #2b4a3b;font:9px
 .cellBody{width:24px;height:11px;display:block;position:relative;border:1px solid currentColor;padding:1px}
 .cellBody::after{content:'';position:absolute;right:-4px;top:2px;width:2px;height:5px;background:currentColor}
 #batteryFill{height:100%;display:block;background:currentColor}
+#stamHud{position:absolute;top:114px;right:12px;width:84px;height:7px;border:1px solid #2b4a3b;background:rgba(6,13,10,.8);padding:1px}
+#stamFill{display:block;height:100%;width:100%;background:#8fbf6a;transition:width .12s linear}
+#stamHud[data-low="1"] #stamFill{background:#d58a3c}
+#stamHud[data-empty="1"] #stamFill{background:#c8483a}
+#bigMark{display:block;margin:10px auto 0;background:none;border:1px solid rgba(220,215,190,.35);color:#cfc7a6;letter-spacing:.1em;font-size:12px;padding:6px 12px;cursor:pointer}
+#bigMark.on{color:#ffd86a;border-color:rgba(255,216,106,.7)}
+.th{position:relative}.th .mk{position:absolute;right:3px;top:3px;color:#ffd86a;font-size:15px;text-shadow:0 0 6px #000}
 #batteryMsg{position:absolute;top:110px;right:12px;max-width:min(220px,62vw);color:var(--paper);font-size:13px;
 text-align:right;background:rgba(6,13,10,.9);border:1px solid #4a3a26;padding:5px 8px}
 #goalMarker{position:absolute;top:0;left:0;display:grid;justify-items:center;gap:6px;color:var(--amber);
@@ -268,6 +275,7 @@ margin:16px auto 0;text-align:left;font-size:13px;color:var(--dim)}
  <div id="radioFx" aria-hidden="true"><i style="animation-delay:0s"></i><i style="animation-delay:.08s"></i><i style="animation-delay:.16s"></i><i style="animation-delay:.24s"></i><i style="animation-delay:.32s"></i><i style="animation-delay:.4s"></i></div>
  <div id="batteryHud"><span aria-hidden="true">F</span><span class="cellBody" id="batteryMeter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><span id="batteryFill"></span></span><span id="batteryPct" aria-hidden="true">100%</span></div>
  <div id="batteryMsg" role="status" hidden></div>
+ <div id="stamHud" aria-hidden="true"><span id="stamFill"></span></div>
  <div id="goalMarker" aria-hidden="true" hidden><span id="goalGem"></span><span id="goalDist"></span></div>
  <div id="prompt"><b>[E]</b> <span id="prT"></span></div>
  <div id="cook"><span id="cookL"></span><div id="cookBar"><div id="cookFill"></div></div></div>
@@ -333,7 +341,7 @@ margin:16px auto 0;text-align:left;font-size:13px;color:var(--dim)}
  <div class="dicon" id="icoPis" style="left:14px;top:96px"><i>🕹</i><span>PISMAN.exe</span></div>
  <div class="win" id="winPhoto">
   <div class="wt"><span>PhotoView 1.2 — E:\SD_CARDS</span><span class="x" id="pxClose">✕</span></div>
-  <div class="wc"><div id="grid"></div><div id="big"><img id="bigImg" alt=""><div class="fn" id="bigName"></div><div id="bigCap"></div><button class="ob" id="bigBack"></button></div></div>
+  <div class="wc"><div id="grid"></div><div id="big"><img id="bigImg" alt=""><div class="fn" id="bigName"></div><div id="bigCap"></div><button class="ob" id="bigMark"></button><button class="ob" id="bigBack"></button></div></div>
   <div class="ws"><span id="pStat"></span><span id="pHint"></span></div>
  </div>
  <div class="win" id="winPis">
@@ -521,6 +529,10 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       osStart: "Пуск",
       pBack: "← НАЗАД",
       pStat: "6 файлов · просмотрено {n}/6",
+      pMarked: " · отмечено {n}",
+      bigMark: "☆ ПОМЕТИТЬ КАДР",
+      bigUnmark: "★ СНЯТЬ ПОМЕТКУ",
+      markToast: "кадр помечен",
       pHint: "открой все снимки",
       pisScore: "ОЧКИ {n}",
       pisLives: "ЖИЗНИ {n}",
@@ -675,6 +687,10 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       osStart: "Start",
       pBack: "← BACK",
       pStat: "6 files · viewed {n}/6",
+      pMarked: " · marked {n}",
+      bigMark: "☆ MARK FRAME",
+      bigUnmark: "★ UNMARK",
+      markToast: "frame marked",
       pHint: "open every photo",
       pisScore: "SCORE {n}",
       pisLives: "LIVES {n}",
@@ -726,6 +742,8 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     carried: 6,
     collected: 0,
     viewed: new Set(),
+    marks: {},
+    stam: 1,
     photos: {},
     objK: "",
     objN: 0,
@@ -1589,7 +1607,15 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       text = G.batMsg && G.time < G.batUntil ? TF(G.batMsg, G.spares) : "";
     if (msg.textContent !== text) msg.textContent = text;
     msg.hidden = !text;
+    renderStamina();
   };
+  function renderStamina() {
+    const e = $("stamHud");
+    if (!e) return;
+    $("stamFill").style.width = Math.round(G.stam * 100) + "%";
+    e.dataset.low = G.stam < 0.34 ? "1" : "0";
+    e.dataset.empty = G.stam <= 0.01 ? "1" : "0";
+  }
   function batteryNotice(key) {
     G.batMsg = key;
     G.batUntil = G.time + 3.1;
@@ -1756,20 +1782,132 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     c.hit = false;
   });
   const trees = [];
-  (function ground() {
-    const g = new THREE.Mesh(new THREE.CircleGeometry(190, 48), M(0x14261a));
-    g.rotation.x = -PI / 2;
-    sc.add(g);
-    const r = new THREE.Mesh(new THREE.PlaneGeometry(7, 400), M(0x33301f));
-    r.rotation.x = -PI / 2;
-    r.position.set(10, 0.02, 0);
-    sc.add(r);
-    for (let i = 0; i < 40; i++) {
-      const t = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 3), M(0x2a2718));
-      t.rotation.x = -PI / 2;
-      t.position.set(8.4 + (i % 2) * 3.2, 0.03, -190 + i * 10);
-      sc.add(t);
+  /* shared low-poly parts: every tree, rock and tuft reuses these geometries */
+  const GEO = {
+    trunk: new THREE.CylinderGeometry(0.17, 0.4, 4.8, 6),
+    coneA: new THREE.ConeGeometry(2.45, 5.1, 7),
+    coneB: new THREE.ConeGeometry(1.9, 4.2, 7),
+    coneC: new THREE.ConeGeometry(1.28, 3.5, 7),
+    birchTrunk: new THREE.CylinderGeometry(0.12, 0.2, 5.6, 6),
+    birchCrown: new THREE.SphereGeometry(1.5, 7, 6),
+    rock: new THREE.DodecahedronGeometry(0.62, 0),
+    grass: new THREE.ConeGeometry(0.1, 0.42, 4),
+    fern: new THREE.ConeGeometry(0.54, 0.62, 5),
+    log: new THREE.CylinderGeometry(0.21, 0.3, 2.7, 7),
+    stump: new THREE.CylinderGeometry(0.4, 0.48, 0.55, 7),
+    mushroom: new THREE.CylinderGeometry(0.02, 0.03, 0.14, 5),
+  };
+  const _im = new THREE.Matrix4(),
+    _iq = new THREE.Quaternion(),
+    _ie = new THREE.Euler(),
+    _iv = new THREE.Vector3(),
+    _is = new THREE.Vector3(),
+    _ic = new THREE.Color();
+  function scatter(geo, color, n, place, tint) {
+    const im = new THREE.InstancedMesh(geo, M(tint ? 0xffffff : color), n);
+    for (let i = 0; i < n; i++) {
+      const p = place(i);
+      _ie.set(p.rx || 0, p.ry || 0, p.rz || 0);
+      _iq.setFromEuler(_ie);
+      const sca = p.s || 1;
+      _is.set(sca, p.sy || sca, sca);
+      _iv.set(p.x, p.y || 0, p.z);
+      _im.compose(_iv, _iq, _is);
+      im.setMatrixAt(i, _im);
+      if (tint) {
+        _ic.setHSL(tint[0] + R() * tint[3], tint[1], tint[2] + R() * tint[4]);
+        im.setColorAt(i, _ic);
+      }
     }
+    im.instanceMatrix.needsUpdate = true;
+    if (im.instanceColor) im.instanceColor.needsUpdate = true;
+    sc.add(im);
+    return im;
+  }
+  (function ground() {
+    /* forest floor */
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(215, 64), M(0x14261a));
+    floor.rotation.x = -PI / 2;
+    sc.add(floor);
+    /* dirt road, two ruts and a grassy crown in the middle */
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(7.4, 430), M(0x33301f));
+    road.rotation.x = -PI / 2;
+    road.position.set(10, 0.02, 0);
+    sc.add(road);
+    for (const off of [-1.55, 1.55]) {
+      const rut = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 430), M(0x27241a));
+      rut.rotation.x = -PI / 2;
+      rut.position.set(10 + off, 0.028, 0);
+      sc.add(rut);
+    }
+    const crown = new THREE.Mesh(new THREE.PlaneGeometry(1.25, 430), M(0x1b2a1a));
+    crown.rotation.x = -PI / 2;
+    crown.position.set(10, 0.03, 0);
+    sc.add(crown);
+    /* packed earth around the RV and the clearing */
+    const camp = new THREE.Mesh(new THREE.CircleGeometry(14, 26), M(0x1a2a1c));
+    camp.rotation.x = -PI / 2;
+    camp.position.set(0, 0.026, 0);
+    sc.add(camp);
+    const site = new THREE.Mesh(new THREE.CircleGeometry(11, 26), M(0x1a1f18));
+    site.rotation.x = -PI / 2;
+    site.position.set(SITE.x, 0.027, SITE.z);
+    sc.add(site);
+    /* undergrowth, stones, deadwood */
+    scatter(GEO.rock, 0x3b4036, 95, () => {
+      const a = R() * PI * 2,
+        r = 6 + Math.sqrt(R()) * 128;
+      return {
+        x: Math.cos(a) * r,
+        z: Math.sin(a) * r,
+        y: 0.08,
+        s: 0.3 + R() * 0.85,
+        ry: R() * PI,
+        rx: R() * 0.5,
+      };
+    }, [0, 0.06, 0.21, 0.02, 0.06]);
+    scatter(GEO.grass, 0x21402a, 1500, () => {
+      const a = R() * PI * 2,
+        r = 4 + Math.sqrt(R()) * 56;
+      const x = Math.cos(a) * r,
+        z = Math.sin(a) * r;
+      const nearRoad = Math.abs(x - 10) < 5.4;
+      return {
+        x: nearRoad ? 10 + (R() - 0.5) * 7.6 : x,
+        z: z,
+        y: 0.03,
+        s: 0.6 + R() * 0.7,
+        rx: (R() - 0.5) * 0.2,
+        rz: (R() - 0.5) * 0.25,
+      };
+    }, [0.27, 0.32, 0.11, 0.03, 0.06]);
+    scatter(GEO.fern, 0x1d3a26, 260, () => {
+      const a = R() * PI * 2,
+        r = 9 + Math.sqrt(R()) * 85;
+      return {
+        x: Math.cos(a) * r,
+        z: Math.sin(a) * r,
+        y: 0.2,
+        s: 0.7 + R() * 1.1,
+        sy: 0.55 + R() * 0.5,
+        ry: R() * PI,
+      };
+    }, [0.29, 0.36, 0.1, 0.03, 0.05]);
+    scatter(GEO.mushroom, 0x8a6b47, 60, () => {
+      const a = R() * PI * 2,
+        r = 5 + Math.sqrt(R()) * 34;
+      return { x: Math.cos(a) * r, z: Math.sin(a) * r, y: 0.07, s: 0.8 + R() * 0.7 };
+    });
+    scatter(GEO.log, 0x3d2f22, 18, () => {
+      const a = R() * PI * 2,
+        r = 16 + Math.sqrt(R()) * 110;
+      return { x: Math.cos(a) * r, z: Math.sin(a) * r, y: 0.28, rx: PI / 2, ry: R() * PI, s: 0.8 + R() * 0.8 };
+    });
+    scatter(GEO.stump, 0x3a2d20, 16, () => {
+      const a = R() * PI * 2,
+        r = 18 + Math.sqrt(R()) * 100;
+      return { x: Math.cos(a) * r, z: Math.sin(a) * r, y: 0.24, s: 0.7 + R() * 0.8, ry: R() * PI };
+    });
   })();
   function blocked(x, z) {
     if (Math.abs(x - 10) < 4.6) return true;
@@ -1784,77 +1922,115 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     return false;
   }
   (function forest() {
-    const N = 420,
+    const N = 440,
       pos = [];
     let guard = 0;
-    while (pos.length < N && guard++ < 9000) {
+    while (pos.length < N && guard++ < 12000) {
       const a = R() * PI * 2,
-        r = 13 + Math.sqrt(R()) * 150,
+        r = 13 + Math.sqrt(R()) * 168,
         x = Math.cos(a) * r,
         z = Math.sin(a) * r;
       if (blocked(x, z)) continue;
       let ok = true;
       for (const p of pos) {
-        if (Math.hypot(p.x - x, p.z - z) < 3.1) {
+        const dx = p.x - x,
+          dz = p.z - z;
+        if (dx * dx + dz * dz < 9.4) {
           ok = false;
           break;
         }
       }
       if (!ok) continue;
-      pos.push({ x, z, s: 0.72 + R() * 0.7, rot: R() * PI });
+      pos.push({ x: x, z: z, s: 0.7 + R() * 0.9, rot: R() * PI, birch: R() < 0.2 });
     }
-    const tg = new THREE.CylinderGeometry(0.2, 0.34, 4.2, 6),
-      fg = new THREE.ConeGeometry(2.25, 7.4, 7),
-      fg2 = new THREE.ConeGeometry(1.5, 4.2, 7);
-    const ti = new THREE.InstancedMesh(tg, M(0x3a2a1c), pos.length),
-      fi = new THREE.InstancedMesh(fg, M(0xffffff), pos.length),
-      f2 = new THREE.InstancedMesh(fg2, M(0xffffff), pos.length);
-    const mx = new THREE.Matrix4(),
-      q = new THREE.Quaternion(),
-      v = new THREE.Vector3(),
-      s = new THREE.Vector3(),
-      col = new THREE.Color();
-    pos.forEach((p, i) => {
-      trees.push({ x: p.x, z: p.z, r: 0.42 * p.s });
-      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), p.rot);
-      s.set(p.s, p.s, p.s);
-      v.set(p.x, 2.1 * p.s, p.z);
-      mx.compose(v, q, s);
-      ti.setMatrixAt(i, mx);
-      v.set(p.x, 7.1 * p.s, p.z);
-      mx.compose(v, q, s);
-      fi.setMatrixAt(i, mx);
-      v.set(p.x, 9.9 * p.s, p.z);
-      mx.compose(v, q, s);
-      f2.setMatrixAt(i, mx);
-      col.setHSL(0.32 + R() * 0.05, 0.34, 0.09 + R() * 0.06);
-      fi.setColorAt(i, col);
-      f2.setColorAt(i, col);
+    const set = (mesh, i, x, y, z, rot, s) => {
+      _iq.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rot);
+      _iv.set(x, y, z);
+      _is.set(s, s, s);
+      _im.compose(_iv, _iq, _is);
+      mesh.setMatrixAt(i, _im);
+    };
+    const spruce = pos.filter((p) => !p.birch),
+      birch = pos.filter((p) => p.birch);
+    const trunks = new THREE.InstancedMesh(GEO.trunk, M(0x3a2a1c), spruce.length);
+    const crowns = [
+      new THREE.InstancedMesh(GEO.coneA, M(0xffffff), spruce.length),
+      new THREE.InstancedMesh(GEO.coneB, M(0xffffff), spruce.length),
+      new THREE.InstancedMesh(GEO.coneC, M(0xffffff), spruce.length),
+    ];
+    spruce.forEach((p, i) => {
+      trees.push({ x: p.x, z: p.z, r: 0.4 * p.s });
+      set(trunks, i, p.x, 2.4 * p.s, p.z, p.rot, p.s);
+      crowns.forEach((layer, li) => {
+        const h = [6.3, 8.5, 10.4][li] * p.s;
+        set(layer, i, p.x, h, p.z, p.rot + li * 0.35, p.s);
+        _ic.setHSL(0.33 + R() * 0.04, 0.33, 0.085 + R() * 0.05);
+        layer.setColorAt(i, _ic);
+      });
     });
-    ti.instanceMatrix.needsUpdate =
-      fi.instanceMatrix.needsUpdate =
-      f2.instanceMatrix.needsUpdate =
-        true;
-    if (fi.instanceColor) fi.instanceColor.needsUpdate = true;
-    if (f2.instanceColor) f2.instanceColor.needsUpdate = true;
-    sc.add(ti, fi, f2);
-    const bg = new THREE.SphereGeometry(1, 6, 5),
-      bi = new THREE.InstancedMesh(bg, M(0x1a3020), 46);
-    for (let i = 0; i < 46; i++) {
-      const a = R() * PI * 2,
-        r = 12 + R() * 120,
-        x = Math.cos(a) * r,
-        z = Math.sin(a) * r;
-      if (Math.abs(x - 10) < 5) {
-        v.set(x + 9, 0.5, z);
-      } else v.set(x, 0.5, z);
-      s.set(1.3 + R(), 0.8 + R() * 0.5, 1.2 + R());
-      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), R() * PI);
-      mx.compose(v, q, s);
-      bi.setMatrixAt(i, mx);
+    const setS = (mesh, i, x, y, z, rot, s, sy) => {
+      _iq.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rot);
+      _iv.set(x, y, z);
+      _is.set(s, sy, s);
+      _im.compose(_iv, _iq, _is);
+      mesh.setMatrixAt(i, _im);
+    };
+    const bTrunks = new THREE.InstancedMesh(GEO.birchTrunk, M(0x8d9484), birch.length);
+    const bMarks = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(0.26, 0.09, 0.26),
+      M(0x3c4238),
+      birch.length * 3,
+    );
+    const bCrowns = new THREE.InstancedMesh(GEO.birchCrown, M(0xffffff), birch.length);
+    const bCrowns2 = new THREE.InstancedMesh(GEO.birchCrown, M(0xffffff), birch.length);
+    birch.forEach((p, i) => {
+      trees.push({ x: p.x, z: p.z, r: 0.3 * p.s });
+      set(bTrunks, i, p.x, 3.2 * p.s, p.z, p.rot, p.s);
+      for (let k = 0; k < 3; k++) {
+        setS(bMarks, i * 3 + k, p.x, (1.1 + k * 1.5 + R() * 0.5) * p.s, p.z, p.rot + k, p.s, 1);
+      }
+      setS(bCrowns, i, p.x, 7.1 * p.s, p.z, p.rot, p.s * 1.05, p.s * 1.55);
+      setS(bCrowns2, i, p.x + 0.75 * p.s, 5.9 * p.s, p.z - 0.4 * p.s, p.rot + 1, p.s * 0.72, p.s * 1.1);
+      _ic.setHSL(0.23 + R() * 0.04, 0.32, 0.16 + R() * 0.07);
+      bCrowns.setColorAt(i, _ic);
+      _ic.setHSL(0.23 + R() * 0.04, 0.3, 0.12 + R() * 0.06);
+      bCrowns2.setColorAt(i, _ic);
+    });
+    [trunks, bTrunks, bMarks, bCrowns, bCrowns2, ...crowns].forEach((m) => {
+      m.instanceMatrix.needsUpdate = true;
+      if (m.instanceColor) m.instanceColor.needsUpdate = true;
+      sc.add(m);
+    });
+    /* distant tree wall closes the horizon cheaply */
+    const wall = new THREE.InstancedMesh(GEO.coneA, M(0x0c1a13), 190);
+    for (let i = 0; i < 190; i++) {
+      const a = (i / 190) * PI * 2 + R() * 0.03,
+        r = 176 + R() * 28,
+        s = 1.6 + R() * 1.4;
+      set(wall, i, Math.cos(a) * r, 5 * s, Math.sin(a) * r, R() * PI, s);
     }
-    bi.instanceMatrix.needsUpdate = true;
-    sc.add(bi);
+    wall.instanceMatrix.needsUpdate = true;
+    sc.add(wall);
+    /* low bushes near the camp */
+    const bushGeo = new THREE.IcosahedronGeometry(1, 1);
+    const bush = new THREE.InstancedMesh(bushGeo, M(0x16291c), 160);
+    for (let i = 0; i < 160; i++) {
+      const a = R() * PI * 2,
+        r = 12 + R() * 118,
+        s0 = 0.5 + R() * 0.45;
+      const cx = Math.cos(a) * r,
+        cz = Math.sin(a) * r;
+      _iv.set(cx + (R() - 0.5) * 1.1, 0.3 + R() * 0.18, cz + (R() - 0.5) * 1.1);
+      _is.set(s0 * (0.9 + R() * 0.5), s0 * (0.65 + R() * 0.35), s0 * (0.9 + R() * 0.5));
+      _iq.setFromEuler(new THREE.Euler(R() * 0.4, R() * PI, R() * 0.4));
+      _im.compose(_iv, _iq, _is);
+      bush.setMatrixAt(i, _im);
+      _ic.setHSL(0.3 + R() * 0.05, 0.3, 0.07 + R() * 0.05);
+      bush.setColorAt(i, _ic);
+    }
+    bush.instanceMatrix.needsUpdate = true;
+    if (bush.instanceColor) bush.instanceColor.needsUpdate = true;
+    sc.add(bush);
   })();
   function pushOut(p) {
     for (const t of trees) {
@@ -1879,8 +2055,8 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
   const rv = new THREE.Group();
   sc.add(rv);
   const wallMapCanvas = document.createElement("canvas");
-  wallMapCanvas.width = 256;
-  wallMapCanvas.height = 192;
+  wallMapCanvas.width = 512;
+  wallMapCanvas.height = 384;
   const wallMapTex = new THREE.CanvasTexture(wallMapCanvas);
   wallMapTex.encoding = THREE.sRGBEncoding;
   const mapCoord = (p) => [44 + (p.x + 54) * 3.55, 26 + (p.z + 92) * 2.63];
@@ -1888,48 +2064,128 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     mapCoord(p)
       .map((n) => n.toFixed(1))
       .join(",");
+  /* Hand-drawn network schematic hanging in the RV: it redraws itself as the
+     traps go up and the cards come back. */
   function updateWallMap() {
-    const g = wallMapCanvas.getContext("2d");
+    const c = wallMapCanvas,
+      g = c.getContext("2d"),
+      W = c.width,
+      H = c.height;
+    const L = G.lang === "ru"
+      ? { t: "СХЕМА СЕТИ", s: "6 КАНАЛОВ · 1 ПРИЁМНИК", hub: "ФУРГОН", on: "установлена", off: "ожидает", cards: "карты", net: "СЕТЬ", fig: "рис. 3 — сеть фотоловушек" }
+      : { t: "TRAP NETWORK", s: "6 CHANNELS · 1 RECEIVER", hub: "RV", on: "mounted", off: "pending", cards: "cards", net: "NET", fig: "fig. 3 — camera network" };
+    g.setTransform(1, 0, 0, 1, 0, 0);
     g.fillStyle = "#d8c595";
-    g.fillRect(0, 0, 256, 192);
-    g.save();
-    g.scale(256 / 540, 192 / 435);
-    g.strokeStyle = "#b4a06f";
+    g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 1600; i++) {
+      g.fillStyle = R() < 0.5 ? "rgba(120,95,55,.05)" : "rgba(255,246,214,.07)";
+      g.fillRect(R() * W, R() * H, 2, 2);
+    }
+    g.strokeStyle = "#8a7248";
+    g.lineWidth = 3;
+    g.strokeRect(10, 10, W - 20, H - 20);
+    g.strokeStyle = "rgba(120,95,55,.28)";
     g.lineWidth = 1;
-    for (let i = 40; i < 500; i += 29) {
+    for (let x = 10; x < W; x += 32) {
       g.beginPath();
-      g.moveTo(i, 25);
-      g.lineTo(i, 404);
+      g.moveTo(x, 10);
+      g.lineTo(x, H - 10);
       g.stroke();
     }
-    for (let i = 28; i < 405; i += 29) {
+    for (let y = 10; y < H; y += 32) {
       g.beginPath();
-      g.moveTo(35, i);
-      g.lineTo(510, i);
+      g.moveTo(10, y);
+      g.lineTo(W - 10, y);
       g.stroke();
     }
-    g.strokeStyle = "#665436";
-    g.lineWidth = 4;
-    g.beginPath();
-    g.moveTo(...mapCoord(DOOR));
-    g.lineTo(...mapCoord(CAMS[5]));
-    g.stroke();
-    g.font = "22px Georgia";
     g.fillStyle = "#3b412e";
-    CAMS.forEach((p, i) => {
-      const [x, y] = mapCoord(p);
-      g.fillRect(x - 4, y - 4, 8, 8);
-      g.fillText(String(i + 1), x + 8, y);
+    g.font = "700 26px Georgia,serif";
+    g.fillText(L.t, 28, 48);
+    g.font = "15px Georgia,serif";
+    g.fillStyle = "#6b5a3a";
+    g.fillText(L.s, 28, 70);
+    const mounted = CAMS.filter((x) => x.mounted).length,
+      cards = CAMS.filter((x) => x.card).length;
+    g.textAlign = "right";
+    g.font = "700 17px Georgia,serif";
+    g.fillStyle = "#5f281d";
+    g.fillText(L.net + " " + mounted + "/6 · " + L.cards + " " + cards + "/6", W - 28, 48);
+    g.textAlign = "left";
+    const hx = W / 2,
+      hy = H / 2 - 4;
+    const nodes = CAMS.map((cam, i) => {
+      const a = -PI / 2 + (i / 6) * PI * 2;
+      return { x: hx + Math.cos(a) * 165, y: hy + Math.sin(a) * 94, cam: cam, i: i };
     });
-    if (G.day === 3) {
-      const [x, y] = mapCoord(CAMS[5]);
-      g.strokeStyle = "#862923";
-      g.lineWidth = 4;
+    nodes.forEach((n) => {
       g.beginPath();
-      g.ellipse(x + 5, y, 20, 14, -0.2, 0, PI * 2);
+      g.moveTo(hx, hy);
+      g.lineTo(n.x, n.y);
+      g.strokeStyle = n.i === 5 ? "rgba(132,42,36,.9)" : n.cam.mounted ? "rgba(47,90,58,.9)" : "rgba(120,100,70,.45)";
+      g.lineWidth = n.cam.mounted ? 3 : 1.6;
+      g.setLineDash(n.cam.mounted ? [] : [6, 6]);
       g.stroke();
-    }
+    });
+    g.setLineDash([]);
+    g.save();
+    g.translate(hx, hy);
+    g.fillStyle = "#3b412e";
+    g.fillRect(-46, -26, 92, 52);
+    g.fillStyle = "#d8c595";
+    g.fillRect(-38, -20, 56, 32);
+    g.fillStyle = "#2f5a3a";
+    g.fillRect(-38, -20, 56, 9);
+    g.beginPath();
+    g.arc(-24, 30, 9, 0, PI * 2);
+    g.arc(24, 30, 9, 0, PI * 2);
+    g.fillStyle = "#3b412e";
+    g.fill();
+    g.font = "700 15px Georgia,serif";
+    g.textAlign = "center";
+    g.fillText(L.hub, 0, -36);
     g.restore();
+    g.textAlign = "left";
+    nodes.forEach((n) => {
+      g.save();
+      g.translate(n.x, n.y);
+      g.fillStyle = n.i === 5 && G.day === 3 ? "#842a24" : n.cam.mounted ? "#2f5a3a" : "#8a7a52";
+      g.strokeStyle = "#3b412e";
+      g.lineWidth = 2;
+      g.beginPath();
+      g.rect(-17, -17, 34, 34);
+      g.fill();
+      g.stroke();
+      g.fillStyle = "#f2e6c4";
+      g.font = "700 18px Georgia,serif";
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.fillText(String(n.i + 1), 0, 1);
+      g.textBaseline = "alphabetic";
+      const d = Math.round(Math.hypot(n.cam.x - DOOR.x, n.cam.z - DOOR.z));
+      g.fillStyle = "#4b3f29";
+      g.font = "14px Georgia,serif";
+      g.fillText(d + (G.lang === "ru" ? " м" : " m"), 0, 36);
+      g.restore();
+    });
+    g.strokeStyle = "rgba(95,70,40,.5)";
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(28, H - 56);
+    g.lineTo(W - 28, H - 56);
+    g.stroke();
+    g.font = "13px Georgia,serif";
+    g.fillStyle = "#4b3f29";
+    g.fillText("● " + L.on, 28, H - 34);
+    g.fillText("○ " + L.off, 170, H - 34);
+    if (G.day === 3) {
+      g.fillStyle = "#842a24";
+      g.textAlign = "right";
+      g.fillText(G.lang === "ru" ? "камера 6 · не ходи" : "camera 6 · do not go", W - 28, H - 34);
+      g.textAlign = "left";
+    }
+    g.fillStyle = "#6b5a3a";
+    g.font = "italic 13px Georgia,serif";
+    g.fillText(L.fig, 28, H - 14);
     wallMapTex.needsUpdate = true;
   }
   const spareMeshes = [];
@@ -2020,6 +2276,92 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       cy(0.026, 0.026, 0.048, 0xca9448, 0, 0, -0.052, cell, 8).rotation.x = PI / 2;
       spareMeshes.push(cell);
     }
+    /* --- exterior trim: bumpers, rack, ladder, awning, lights --- */
+    bx(6.34, 0.16, 0.16, 0x8f8a80, 0, 3.26, 1.05, rv);
+    bx(6.34, 0.16, 0.16, 0x8f8a80, 0, 3.26, -1.05, rv);
+    for (let i = -2; i <= 2; i++) bx(0.08, 0.1, 2.1, 0x8f8a80, i * 1.1, 3.3, 0, rv);
+    bx(0.3, 0.26, 2.66, 0x2c2823, 3.2, 0.86, 0, rv);
+    bx(0.3, 0.26, 2.66, 0x2c2823, -3.2, 0.86, 0, rv);
+    bx(0.7, 0.24, 0.9, 0x7d7669, 3.2, 2.0, 0, rv);
+    bx(0.12, 0.06, 0.06, 0xd8c07a, 3.28, 1.9, 0.42, rv, 0.4);
+    bx(0.12, 0.06, 0.06, 0xd8c07a, 3.28, 1.9, -0.42, rv, 0.4);
+    /* ladder to the roof */
+    bx(0.06, 2.2, 0.06, 0x9a958a, 3.05, 2.05, 0.72, rv);
+    bx(0.06, 2.2, 0.06, 0x9a958a, 3.05, 2.05, 0.36, rv);
+    for (let i = 0; i < 6; i++) bx(0.05, 0.05, 0.4, 0x9a958a, 3.05, 1.1 + i * 0.36, 0.54, rv);
+    /* awning cassette */
+    bx(4.6, 0.16, 0.2, 0x4a443c, -0.4, 3.0, -1.24, rv);
+    /* side windows with frames and curtains */
+    [-2.0, 0.2].forEach((wx) => {
+      bx(1.44, 0.9, 0.05, 0x2a2621, wx, 2.2, 1.28, rv);
+      bx(1.3, 0.76, 0.02, 0x162024, wx, 2.2, 1.31, rv);
+      bx(0.62, 0.8, 0.03, 0x6b3a3a, wx - 0.34, 2.2, 1.33, rv);
+      bx(0.62, 0.8, 0.03, 0x6b3a3a, wx + 0.34, 2.2, 1.33, rv);
+    });
+    bx(1.2, 0.74, 0.05, 0x2a2621, 1.6, 2.3, -1.28, rv);
+    bx(1.06, 0.62, 0.02, 0x162024, 1.6, 2.3, -1.31, rv);
+    /* door frame + step + light */
+    bx(1.18, 2.02, 0.05, 0x33302a, 1.8, 1.6, 1.28, rv);
+    bx(0.9, 0.5, 0.04, 0x18242a, 1.8, 2.2, 1.31, rv);
+    bx(0.34, 0.05, 0.34, 0x6a6258, 1.8, 0.5, 1.85, rv);
+    bx(0.16, 0.1, 0.1, 0xffe9b0, 1.3, 2.34, 1.34, rv, 1);
+    /* wheels: rubber + hub, mud flaps */
+    [
+      [-2.2, 1.35],
+      [-2.2, -1.35],
+      [2.2, 1.35],
+      [2.2, -1.35],
+    ].forEach((w) => {
+      const tyre = cy(0.56, 0.56, 0.34, 0x14171a, w[0], 0.56, w[1], rv, 14);
+      tyre.rotation.x = PI / 2;
+      const hub = cy(0.26, 0.26, 0.36, 0x8b877c, w[0], 0.56, w[1], rv, 10);
+      hub.rotation.x = PI / 2;
+      bx(0.1, 0.5, 0.62, 0x1d1c1a, w[0], 0.5, w[1] * 1.18, rv);
+    });
+    /* spare wheel on the back */
+    const spare = cy(0.48, 0.48, 0.26, 0x181b1d, 3.28, 1.85, 0, rv, 12);
+    spare.rotation.z = PI / 2;
+    /* --- interior: rug, bedding, kitchen, radio, clock --- */
+    bx(5.5, 0.02, 2.0, 0x4a3b33, 0, 0.66, 0, rv);
+    bx(1.04, 0.07, 1.6, 0x5a6350, 0.4, 0.68, 0, rv);
+    /* bed */
+    bx(1.46, 0.12, 1.86, 0x3a4a3c, 2.1, 1.2, 0, rv);
+    bx(1.3, 0.18, 1.7, 0x7d8878, 2.1, 1.28, 0, rv);
+    bx(1.22, 0.1, 1.2, 0x8f9c88, 2.12, 1.36, 0.22, rv);
+    bx(0.62, 0.16, 0.5, 0xd8d2c0, 2.55, 1.4, -0.6, rv).rotation.y = 0.2;
+    /* kitchen: stove, kettle, sink, mugs, cans */
+    bx(1.9, 0.1, 0.86, 0x3b3b38, -1.9, 1.36, -0.52, rv);
+    bx(0.7, 0.06, 0.7, 0x24262a, -2.2, 1.42, -0.52, rv);
+    cy(0.12, 0.14, 0.06, 0x111214, -2.32, 1.46, -0.52, rv, 10);
+    cy(0.12, 0.14, 0.06, 0x111214, -2.06, 1.46, -0.52, rv, 10);
+    const kettle = cy(0.16, 0.2, 0.28, 0x8a8f92, -2.2, 1.58, -0.52, rv, 10);
+    cy(0.03, 0.03, 0.24, 0x6d7275, -2.06, 1.63, -0.52, rv, 5).rotation.z = -0.7;
+    const cupA = cy(0.06, 0.05, 0.11, 0xd8d2c0, -1.62, 1.46, -0.66, rv, 8);
+    const cupB = cy(0.06, 0.05, 0.11, 0x8c6a4a, -1.46, 1.46, -0.44, rv, 8);
+    bx(0.5, 0.12, 0.3, 0x7a7f82, -1.72, 1.42, -0.3, rv);
+    bx(1.3, 0.06, 0.3, 0x5a4a36, -1.5, 2.15, -1.2, rv);
+    for (let i = 0; i < 5; i++) cy(0.05, 0.05, 0.12, 0x9a7a4a, -2.0 + i * 0.18, 2.24, -1.2, rv, 7);
+    /* radio on the shelf with its own antenna */
+    const radio = new THREE.Group();
+    radio.position.set(-1.35, 1.62, 0.66);
+    rv.add(radio);
+    bx(0.42, 0.24, 0.18, 0x2b2f33, 0, 0, 0, radio);
+    bx(0.16, 0.1, 0.02, 0x0e7f7b, -0.08, 0.03, 0.1, radio, 0.6);
+    cy(0.008, 0.008, 0.5, 0x9a9a9a, 0.16, 0.35, 0, radio, 5);
+    sp(0.02, 0xff3020, 0.13, 0.02, 0.1, radio, 1);
+    bx(0.05, 0.05, 0.03, 0xb8b2a6, 0.06, 0.02, 0.1, radio);
+    /* wall clock */
+    cy(0.16, 0.16, 0.03, 0xd8d2c0, 0.4, 2.55, 1.2, rv, 12).rotation.x = PI / 2;
+    bx(0.01, 0.12, 0.01, 0x2b2b2b, 0.4, 2.6, 1.22, rv);
+    bx(0.09, 0.01, 0.01, 0x2b2b2b, 0.45, 2.55, 1.22, rv);
+    /* fridge + pantry */
+    bx(0.85, 1.5, 0.6, 0x9aa39a, -2.5, 1.4, -0.75, rv);
+    bx(0.06, 1.2, 0.06, 0x6d766d, -2.1, 1.4, -0.72, rv);
+    bx(0.9, 0.06, 0.62, 0x3d463c, -2.5, 2.16, -0.75, rv);
+    /* laptop screen glow */
+    const lapGlow = new THREE.PointLight(0x6fe6d0, 0.35, 1.6, 2);
+    lapGlow.position.set(-1.6, 1.7, -0.5);
+    rv.add(lapGlow);
     const lamp = new THREE.PointLight(0xffd9a0, 0.75, 6, 2);
     lamp.position.set(0, 2.6, 0);
     rv.add(lamp);
@@ -2083,15 +2425,24 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
   /* camera traps */
   const glints = [];
   CAMS.forEach((c, i) => {
-    const band = cy(0.36, 0.36, 0.22, 0xe8e4d8, c.x, 1.55, c.z, sc, 10);
-    band.material = M(0xe8e4d8, 0.25);
+    const band = cy(0.38, 0.38, 0.24, 0xe8e4d8, c.x, 1.55, c.z, sc, 10);
+    band.material = M(0xe8e4d8, 0.22);
     const g = new THREE.Group();
     g.position.copy(c.mount);
     g.lookAt(c.aim.x, 1.1, c.aim.z);
     sc.add(g);
-    bx(0.22, 0.3, 0.14, 0x2f3a2c, 0, 0, 0, g);
-    cy(0.06, 0.07, 0.08, 0x14181a, 0, 0.02, 0.1, g, 10).rotation.x = PI / 2;
-    const led = sp(0.026, 0xff3020, 0, 0.11, 0.08, g, 1);
+    bx(0.27, 0.34, 0.16, 0x2b3528, 0, 0, 0, g);
+    bx(0.29, 0.06, 0.18, 0x1d251c, 0, 0.19, 0, g);
+    cy(0.075, 0.085, 0.11, 0x0f1315, 0, 0.02, 0.12, g, 12).rotation.x = PI / 2;
+    cy(0.05, 0.05, 0.03, 0x2a6f7a, 0, 0.02, 0.175, g, 12).rotation.x = PI / 2;
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * PI * 2;
+      sp(0.014, 0x8a1a12, Math.cos(a) * 0.078, 0.02 + Math.sin(a) * 0.078, 0.16, g);
+    }
+    const led = sp(0.024, 0xff3020, 0, 0.12, 0.09, g, 1);
+    cy(0.008, 0.01, 0.22, 0x1a1a1a, 0.1, 0.28, -0.02, g, 5);
+    bx(0.16, 0.09, 0.02, 0x1c3a2c, -0.1, 0.22, 0.04, g);
+    bx(0.1, 0.05, 0.005, 0xe8e4d8, 0, -0.13, 0.085, g);
     c.led = led;
     c.trap = g;
     g.visible = false;
@@ -2161,27 +2512,47 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
   }
   function buildCorpse() {
     const g = new THREE.Group();
-    bx(0.62, 0.24, 0.95, 0x5c5f52, 0, 0.14, 0, g);
-    sp(0.16, 0xc9bfa6, 0, 0.16, -0.62, g);
-    cy(0.08, 0.08, 0.6, 0x4a4d42, -0.22, 0.12, 0.6, g, 6).rotation.x = PI / 2.2;
-    cy(0.08, 0.08, 0.6, 0x4a4d42, 0.22, 0.12, 0.6, g, 6).rotation.x = PI / 1.9;
-    cy(0.07, 0.07, 0.55, 0xc9bfa6, -0.42, 0.13, -0.1, g, 6).rotation.z = PI / 2.3;
-    cy(0.07, 0.07, 0.55, 0xc9bfa6, 0.42, 0.13, -0.1, g, 6).rotation.z = -PI / 2.3;
-    const bl = new THREE.Mesh(
-      new THREE.CircleGeometry(1.15, 16),
-      new THREE.MeshBasicMaterial({ color: 0x5a0f0a, transparent: true, opacity: 0.9 }),
+    bx(0.7, 0.22, 1.0, 0x4f554c, 0, 0.14, 0, g);            // jacket
+    bx(0.54, 0.08, 0.72, 0x3f453d, 0, 0.24, -0.06, g);      // back
+    bx(0.5, 0.12, 0.16, 0x6b3a2a, 0, 0.16, 0.42, g);        // belt line
+    sp(0.16, 0xc9bfa6, 0, 0.16, -0.62, g);                  // skull
+    const hair = sp(0.15, 0x2a2320, 0, 0.21, -0.68, g);
+    hair.scale.set(1.05, 0.8, 0.9);
+    cy(0.08, 0.08, 0.62, 0x4a4d42, -0.24, 0.12, 0.6, g, 6).rotation.x = PI / 2.2;
+    cy(0.08, 0.08, 0.62, 0x4a4d42, 0.24, 0.12, 0.6, g, 6).rotation.x = PI / 1.9;
+    bx(0.18, 0.12, 0.3, 0x2a2420, -0.26, 0.1, 0.92, g);      // boots
+    bx(0.18, 0.12, 0.3, 0x2a2420, 0.26, 0.1, 0.9, g);
+    cy(0.07, 0.07, 0.55, 0x6b6f60, -0.44, 0.13, -0.1, g, 6).rotation.z = PI / 2.3;
+    cy(0.07, 0.07, 0.55, 0x6b6f60, 0.44, 0.13, -0.06, g, 6).rotation.z = -PI / 2.3;
+    sp(0.06, 0xc9bfa6, -0.66, 0.1, -0.16, g);                // hands
+    sp(0.06, 0xc9bfa6, 0.66, 0.1, -0.12, g);
+    const blood = new THREE.Mesh(
+      new THREE.CircleGeometry(1.2, 18),
+      new THREE.MeshBasicMaterial({ color: 0x5a0f0a, transparent: true, opacity: 0.92 }),
     );
-    bl.rotation.x = -PI / 2;
-    bl.position.y = 0.03;
-    g.add(bl);
-    for (let i = 0; i < 5; i++) {
+    blood.rotation.x = -PI / 2;
+    blood.position.y = 0.03;
+    blood.scale.set(1, 0.72, 1);
+    g.add(blood);
+    for (let i = 0; i < 7; i++) {
+      const size = 0.1 + R() * 0.22;
       const s = new THREE.Mesh(
-        new THREE.CircleGeometry(0.12 + R() * 0.2, 8),
+        new THREE.CircleGeometry(size, 8),
         new THREE.MeshBasicMaterial({ color: 0x4d0c08, transparent: true, opacity: 0.85 }),
       );
       s.rotation.x = -PI / 2;
-      s.position.set((R() - 0.5) * 2.6, 0.035, (R() - 0.5) * 2.6);
+      s.position.set((R() - 0.5) * 2.8, 0.035, (R() - 0.5) * 2.8);
       g.add(s);
+    }
+    /* drag marks leading away from the body */
+    for (let i = 0; i < 3; i++) {
+      const m = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.12, 1.5),
+        new THREE.MeshBasicMaterial({ color: 0x3a0806, transparent: true, opacity: 0.5 }),
+      );
+      m.rotation.x = -PI / 2;
+      m.position.set((R() - 0.5) * 0.4, 0.032, 1.4 + i * 1.1);
+      g.add(m);
     }
     return g;
   }
@@ -2202,15 +2573,33 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
   const HIDE = new THREE.Vector3(hideBush.position.x, 0, hideBush.position.z);
   function buildCultist() {
     const g = new THREE.Group();
-    const robe = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.75, 8), M(0x2a1218));
-    robe.position.y = 0.88;
+    const robe = new THREE.Mesh(new THREE.ConeGeometry(0.56, 1.78, 9), M(0x2a1218));
+    robe.position.y = 0.89;
     g.add(robe);
-    sp(0.26, 0x1c0d12, 0, 1.78, 0, g);
-    const face = new THREE.Mesh(new THREE.CircleGeometry(0.17, 8), M(0x050506));
-    face.position.set(0, 1.75, 0.23);
+    const hem = new THREE.Mesh(new THREE.ConeGeometry(0.62, 0.28, 9), M(0x1d0b10));
+    hem.position.y = 0.14;
+    g.add(hem);
+    cy(0.42, 0.42, 0.06, 0x160709, 0, 1.02, 0, g, 9);        // rope belt
+    cy(0.3, 0.36, 0.5, 0x261016, 0, 1.55, 0, g, 9);          // shoulders
+    const hood = sp(0.27, 0x1c0d12, 0, 1.86, 0, g);
+    hood.scale.set(1.05, 1.15, 1.08);
+    const cowl = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.5, 8), M(0x1c0d12));
+    cowl.position.set(0, 2.0, -0.06);
+    g.add(cowl);
+    const face = new THREE.Mesh(new THREE.CircleGeometry(0.16, 9), M(0x050506));
+    face.position.set(0, 1.82, 0.24);
     g.add(face);
-    const e1 = sp(0.035, 0xff2a1a, -0.07, 1.78, 0.24, g, 1),
-      e2 = sp(0.035, 0xff2a1a, 0.07, 1.78, 0.24, g, 1);
+    cy(0.09, 0.11, 0.9, 0x2a1218, -0.46, 1.45, 0.06, g, 6).rotation.z = 0.16;
+    cy(0.09, 0.11, 0.9, 0x2a1218, 0.46, 1.45, 0.06, g, 6).rotation.z = -0.16;
+    const staff = cy(0.028, 0.035, 2.1, 0x3a2a1c, 0.62, 1.05, 0.1, g, 6);
+    staff.rotation.z = -0.1;
+    sp(0.07, 0xc8241a, 0.6, 2.12, 0.1, g, 0.5);
+    for (let i = 0; i < 3; i++) {
+      const charm = cy(0.02, 0.02, 0.22, 0xd8d0b8, -0.2 + i * 0.2, 1.5, 0.34, g, 5);
+      charm.rotation.x = 0.3;
+    }
+    const e1 = sp(0.035, 0xff2a1a, -0.07, 1.84, 0.25, g, 1),
+      e2 = sp(0.035, 0xff2a1a, 0.07, 1.84, 0.25, g, 1);
     e1.visible = e2.visible = false;
     g.userData.eyes = [e1, e2];
     g.visible = false;
@@ -2227,20 +2616,52 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
   }
   function buildMonster() {
     const g = new THREE.Group();
-    const dark = 0x0e0e12;
-    cy(0.1, 0.13, 1.25, dark, -0.22, 0.62, 0, g, 6);
-    cy(0.1, 0.13, 1.25, dark, 0.22, 0.62, 0, g, 6);
-    const torso = cy(0.24, 0.34, 1.05, dark, 0, 1.75, 0, g, 7);
-    const aL = cy(0.075, 0.09, 1.5, dark, -0.42, 1.6, 0, g, 6),
-      aR = cy(0.075, 0.09, 1.5, dark, 0.42, 1.6, 0, g, 6);
-    aL.rotation.z = 0.14;
-    aR.rotation.z = -0.14;
-    const head = sp(0.2, dark, 0, 2.45, 0, g);
-    head.scale.set(1, 1.35, 0.9);
-    const e1 = sp(0.05, 0xdfffe8, -0.08, 2.5, 0.16, g, 1),
-      e2 = sp(0.05, 0xdfffe8, 0.08, 2.5, 0.16, g, 1);
-    sprite(glowWhite, 0.55, -0.08, 2.5, 0.18, g, 0.75);
-    sprite(glowWhite, 0.55, 0.08, 2.5, 0.18, g, 0.75);
+    const dark = 0x0e0e12,
+      darker = 0x08080b;
+    /* long legs, thin torso */
+    cy(0.085, 0.12, 1.4, dark, -0.24, 0.7, 0, g, 7);
+    cy(0.085, 0.12, 1.4, dark, 0.24, 0.7, 0, g, 7);
+    bx(0.26, 0.14, 0.42, darker, -0.25, 0.06, 0.12, g);
+    bx(0.26, 0.14, 0.42, darker, 0.25, 0.06, 0.12, g);
+    const torso = cy(0.26, 0.38, 1.25, dark, 0, 1.95, 0, g, 8);
+    const ribs = cy(0.3, 0.34, 0.3, darker, 0, 1.7, 0, g, 8);
+    const aL = cy(0.07, 0.085, 1.85, dark, -0.46, 1.7, 0, g, 7),
+      aR = cy(0.07, 0.085, 1.85, dark, 0.46, 1.7, 0, g, 7);
+    aL.rotation.z = 0.2;
+    aR.rotation.z = -0.2;
+    /* clawed hands */
+    for (const sx of [-1, 1]) {
+      sp(0.09, 0x060607, sx * 0.6, 2.58, 0.04, g);
+      for (let i = 0; i < 3; i++) {
+        const claw = cy(0.012, 0.02, 0.28, 0xd8d8d0, sx * 0.62 + (i - 1) * 0.05, 2.72, 0.08, g, 4);
+        claw.rotation.x = -0.2;
+      }
+    }
+    const head = sp(0.21, darker, 0, 2.68, 0, g);
+    head.scale.set(1, 1.45, 0.92);
+    bx(0.16, 0.2, 0.16, 0x08080a, 0, 2.55, 0.1, g);           // jaw
+    /* antlers */
+    for (const sx of [-1, 1]) {
+      const a1 = cy(0.025, 0.035, 0.75, 0x2a2620, sx * 0.13, 2.95, 0, g, 5);
+      a1.rotation.z = sx * 0.42;
+      const a2 = cy(0.018, 0.025, 0.5, 0x2a2620, sx * 0.33, 3.25, 0.02, g, 5);
+      a2.rotation.z = sx * 0.85;
+      const a3 = cy(0.014, 0.02, 0.36, 0x2a2620, sx * 0.2, 3.3, -0.12, g, 5);
+      a3.rotation.z = sx * 0.2;
+      a3.rotation.x = 0.5;
+    }
+    /* tattered robe strips */
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * PI * 2;
+      const strip = bx(0.09, 0.7 + R() * 0.7, 0.02, 0x101014, Math.cos(a) * 0.3, 1.25 + R() * 0.2, Math.sin(a) * 0.3, g);
+      strip.rotation.y = a;
+      strip.rotation.z = (R() - 0.5) * 0.2;
+    }
+    const e1 = sp(0.05, 0xdfffe8, -0.085, 2.72, 0.17, g, 1),
+      e2 = sp(0.05, 0xdfffe8, 0.085, 2.72, 0.17, g, 1);
+    sprite(glowWhite, 0.6, -0.085, 2.72, 0.19, g, 0.8);
+    sprite(glowWhite, 0.6, 0.085, 2.72, 0.19, g, 0.8);
+    const mouth = bx(0.1, 0.03, 0.02, 0xb84a4a, 0, 2.52, 0.19, g, 0.4);
     g.userData = { aL, aR, torso, head };
     g.visible = false;
     sc.add(g);
@@ -2267,46 +2688,73 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
   /* animals (photos only) */
   function buildAnimal(kind) {
     const g = new THREE.Group();
+    const legs = (col, y, len, wx, wz) => {
+      [
+        [-wx, wz],
+        [wx, wz],
+        [-wx, -wz],
+        [wx, -wz],
+      ].forEach((l) => {
+        const leg = cy(0.055, 0.045, len, col, l[0], y, l[1], g, 6);
+        leg.rotation.x = (R() - 0.5) * 0.08;
+      });
+    };
     if (kind === 0) {
-      bx(0.95, 0.5, 0.42, 0x6b4f34, 0, 0.85, 0, g);
-      [
-        [-0.35, 0.18],
-        [0.35, 0.18],
-        [-0.35, -0.18],
-        [0.35, -0.18],
-      ].forEach((l) => cy(0.06, 0.06, 0.6, 0x503a26, l[0], 0.3, l[1], g, 6));
-      cy(0.12, 0.14, 0.45, 0x6b4f34, -0.5, 1.15, 0, g, 6).rotation.z = 0.5;
-      bx(0.34, 0.24, 0.22, 0x7a5c3e, -0.72, 1.35, 0, g);
-      cy(0.03, 0.03, 0.4, 0x8a7050, -0.75, 1.6, 0.1, g, 5).rotation.z = 0.4;
-      cy(0.03, 0.03, 0.4, 0x8a7050, -0.75, 1.6, -0.1, g, 5).rotation.z = -0.4;
+      /* deer */
+      bx(1.0, 0.54, 0.46, 0x6b4f34, 0, 0.95, 0, g);
+      bx(0.46, 0.34, 0.4, 0x7a5c3e, -0.6, 1.02, 0, g);
+      cy(0.13, 0.16, 0.52, 0x6b4f34, -0.78, 1.32, 0, g, 6).rotation.z = 0.5;
+      bx(0.34, 0.24, 0.24, 0x7a5c3e, -1.04, 1.58, 0, g);
+      bx(0.12, 0.05, 0.06, 0x3f3327, -1.2, 1.6, 0.1, g);
+      const earL = bx(0.07, 0.16, 0.1, 0x5a4330, -1.04, 1.72, 0.14, g);
+      earL.rotation.z = 0.3;
+      const earR = bx(0.07, 0.16, 0.1, 0x5a4330, -1.04, 1.72, -0.14, g);
+      earR.rotation.z = 0.3;
+      for (const sx of [-1, 1]) {
+        const a1 = cy(0.022, 0.026, 0.42, 0x8a7050, -1.06, 1.8, sx * 0.06, g, 5);
+        a1.rotation.z = -0.25;
+        a1.rotation.x = sx * 0.3;
+        const a2 = cy(0.016, 0.02, 0.3, 0x8a7050, -1.16, 2.0, sx * 0.13, g, 5);
+        a2.rotation.z = 0.55;
+        a2.rotation.x = sx * 0.4;
+      }
+      legs(0x503a26, 0.42, 0.84, 0.32, 0.2);
+      cy(0.03, 0.05, 0.26, 0x7a5c3e, 0.52, 1.02, 0, g, 5).rotation.z = -0.5;
     } else if (kind === 1) {
-      bx(0.6, 0.3, 0.28, 0xb45a28, 0, 0.42, 0, g);
-      [
-        [-0.2, 0.1],
-        [0.2, 0.1],
-        [-0.2, -0.1],
-        [0.2, -0.1],
-      ].forEach((l) => cy(0.045, 0.045, 0.3, 0x8a4520, l[0], 0.15, l[1], g, 6));
-      sp(0.15, 0xc06a34, -0.36, 0.55, 0, g);
-      const t = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.5, 6), M(0xd8b48a));
-      t.position.set(0.42, 0.5, 0);
-      t.rotation.z = -PI / 2.3;
-      g.add(t);
+      /* fox */
+      bx(0.62, 0.3, 0.3, 0xb45a28, 0, 0.44, 0, g);
+      bx(0.26, 0.2, 0.26, 0xd8834a, -0.3, 0.46, 0, g);
+      bx(0.3, 0.24, 0.24, 0xc06a34, -0.46, 0.56, 0, g);
+      sp(0.15, 0xc06a34, -0.4, 0.6, 0, g);
+      bx(0.14, 0.12, 0.14, 0xd8a06a, -0.62, 0.5, 0, g);
+      sp(0.035, 0x1a1410, -0.7, 0.52, 0, g);
+      for (const sz of [-1, 1]) {
+        const ear = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.16, 5), M(0xb45a28));
+        ear.position.set(-0.36, 0.72, sz * 0.07);
+        ear.rotation.z = -0.2;
+        g.add(ear);
+      }
+      legs(0x8a4520, 0.2, 0.4, 0.2, 0.11);
+      /* bushy tail */
+      const t1 = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.42, 6), M(0xb45a28));
+      t1.position.set(0.42, 0.46, 0);
+      t1.rotation.z = -1.1;
+      g.add(t1);
+      sp(0.12, 0xd8a06a, 0.62, 0.58, 0, g);
+      const tip = sp(0.07, 0xe8d8c0, 0.68, 0.63, 0, g);
     } else {
-      bx(0.55, 0.3, 0.26, 0x8a8578, 0, 0.44, 0, g);
-      [
-        [-0.18, 0.09],
-        [0.18, 0.09],
-        [-0.18, -0.09],
-        [0.18, -0.09],
-      ].forEach((l) => cy(0.05, 0.05, 0.32, 0x6f6b60, l[0], 0.16, l[1], g, 6));
-      sp(0.14, 0x9a9588, -0.32, 0.58, 0, g);
-      const e1 = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.14, 4), M(0x3a3830));
-      e1.position.set(-0.34, 0.72, 0.07);
-      g.add(e1);
-      const e2 = e1.clone();
-      e2.position.z = -0.07;
-      g.add(e2);
+      /* hare */
+      bx(0.5, 0.32, 0.28, 0x8a8578, 0, 0.46, 0, g);
+      sp(0.19, 0x9a9588, -0.26, 0.6, 0, g);
+      sp(0.14, 0x7a7568, -0.12, 0.44, 0, g);
+      for (const sz of [-1, 1]) {
+        const ear = bx(0.06, 0.3, 0.09, 0x6f6b60, -0.26, 0.86, sz * 0.07, g);
+        ear.rotation.z = 0.12 + sz * 0.05;
+        ear.rotation.x = sz * 0.12;
+      }
+      const eye = sp(0.025, 0x120f0d, -0.36, 0.64, 0.09, g);
+      legs(0x6f6b60, 0.16, 0.32, 0.16, 0.1);
+      sp(0.08, 0xd8d2c0, 0.26, 0.42, 0, g);
     }
     g.traverse((o) => {
       if (o.layers) o.layers.set(1);
@@ -2778,6 +3226,7 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
   ];
   function applyLang() {
     document.documentElement.lang = G.lang;
+    updateWallMap();
     $("mTitle").textContent = T("title");
     $("mTag").textContent = T("tag");
     $("stampY").textContent = T("summer");
@@ -2973,14 +3422,16 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
   function renderMap() {
     const svg = $("mapSheet"),
       goal = activeGoal();
-    const pin = (p, label, shape, dx = 12, dy = -8) => {
+    const pin = (p, label, shape, dx = 12, dy = -8, col = "#4b3f29") => {
       const [x, y] = mapCoord(p);
       return (
         '<g transform="translate(' +
         x +
         " " +
         y +
-        ')" fill="#4b3f29">' +
+        ')" fill="' +
+        col +
+        '">' +
         shape +
         '<text x="' +
         dx +
@@ -2995,9 +3446,10 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       pin(
         c,
         String(i + 1),
-        '<rect x="-4" y="-4" width="8" height="8" rx="1"/>',
+        '<rect x="-4.5" y="-4.5" width="9" height="9" rx="1"/>',
         i === 5 ? 15 : 10,
         i === 5 ? 6 : -7,
+        c.mounted ? "#2f5a3a" : "#8a7a52",
       ),
     ).join("");
     const [c6x, c6y] = mapCoord(CAMS[5]),
@@ -3048,21 +3500,26 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
         "</text></g>";
     }
     svg.innerHTML =
-      '<defs><pattern id="mapGrid" width="29" height="29" patternUnits="userSpaceOnUse"><path d="M29 0H0V29" fill="none" stroke="#725f3b" stroke-opacity=".26"/></pattern></defs>' +
+      '<defs>' +
+      '<pattern id="mapGrid" width="29" height="29" patternUnits="userSpaceOnUse"><path d="M29 0H0V29" fill="none" stroke="#725f3b" stroke-opacity=".26"/></pattern>' +
+      '<pattern id="marshHatch" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><path d="M0 0V9" stroke="#6b6644" stroke-opacity=".5" stroke-width="1.4"/></pattern>' +
+      '<pattern id="clearingHatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(-30)"><path d="M0 0V8" stroke="#842a24" stroke-opacity=".35" stroke-width="1.2"/></pattern>' +
+      "</defs>" +
       '<rect x="21" y="13" width="498" height="391" fill="url(#mapGrid)" stroke="#826b43"/>' +
-      '<g fill="none" stroke="#777348" stroke-opacity=".45" stroke-width="1.3">' +
+      '<g fill="none" stroke="#777348" stroke-opacity=".4" stroke-width="1.2">' +
       '<path d="M23 141Q82 98 137 147T262 118T376 65 515 97M23 157Q82 115 137 165T263 136T378 81 516 114M23 175Q82 134 137 180T265 152T389 100 516 130"/>' +
-      '<path d="M24 323Q91 271 148 310T269 336 377 289 518 326M24 340Q92 290 146 325T272 354 382 308 518 346M24 358Q98 304 148 344T278 370 385 326 518 363"/></g>' +
-      '<path d="M' +
-      mapPoint(DOOR) +
-      " L" +
-      mapPoint(CAMS[5]) +
-      " L" +
-      mapPoint(SITE) +
-      '" fill="none" stroke="#705333" stroke-width="3" stroke-dasharray="7 6"/>' +
-      '<g transform="translate(57 71)" fill="#4b3f29"><path d="M0 -18 L-5 3 0 0 5 3Z"/><text text-anchor="middle" y="-23">' +
-      T("mapNorth") +
-      "</text></g>" +
+      '<path d="M24 323Q91 271 148 310T269 336 377 289 518 326M24 340Q92 290 146 325T272 354 382 308 518 346M24 358Q98 304 148 344T278 370 385 326 518 363"/>' +
+      '<path d="M70 220Q140 190 205 214T330 205 470 232M70 236Q142 208 206 232T332 224 470 250"/>' +
+      "</g>" +
+      '<ellipse cx="118" cy="345" rx="64" ry="33" fill="url(#marshHatch)" stroke="#6b6644" stroke-opacity=".55" stroke-width="1.2"/>' +
+      '<text class="mapSmall" x="118" y="349" text-anchor="middle" fill="#5c5a3c">' +
+      T("mapSite") +
+      "</text>" +
+      '<circle cx="' +
+      sx +
+      '" cy="' +
+      sy +
+      '" r="42" fill="url(#clearingHatch)" stroke="#656644" stroke-dasharray="5 4" stroke-width="1.4"/>' +
       '<g fill="#4b3f29"><ellipse cx="' +
       sx +
       '" cy="' +
@@ -3073,6 +3530,38 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       (sy - 9) +
       '" text-anchor="end">' +
       T("mapSite") +
+      "</text></g>" +
+      '<path d="M' +
+      mapPoint(DOOR) +
+      " L" +
+      mapPoint(CAMS[5]) +
+      " L" +
+      mapPoint(SITE) +
+      '" fill="none" stroke="#705333" stroke-width="3" stroke-dasharray="7 6"/>' +
+      '<g fill="#8a2a20">' +
+      [0.2, 0.4, 0.6, 0.8]
+        .map((f) => {
+          const x = DOOR.x + (CAMS[5].x - DOOR.x) * f,
+            z = DOOR.z + (CAMS[5].z - DOOR.z) * f;
+          const [px, py] = mapCoord({ x: x, z: z });
+          return '<path transform="translate(' + px + " " + py + ') rotate(45)" d="M0 -3L3 0 0 3 -3 0Z"/>';
+        })
+        .join("") +
+      "</g>" +
+      '<g transform="translate(57 71)" fill="#4b3f29"><circle r="21" fill="none" stroke="#8a7248" stroke-opacity=".6"/><path d="M0 -18 L-5 3 0 0 5 3Z"/><text text-anchor="middle" y="-27">' +
+      T("mapNorth") +
+      "</text></g>" +
+      '<g transform="translate(30 372)"><rect width="470" height="24" fill="#f3e3bb" fill-opacity=".6" stroke="#8a7248" stroke-opacity=".5"/><rect x="8" y="7" width="10" height="10" fill="#2f5a3a"/><text x="23" y="16" font-size="10.5" fill="#4b3f29">' +
+      T("mapCam").replace("{n}", "1–6") +
+      "</text>" +
+      '<path d="M132 12h14" stroke="#705333" stroke-width="3" stroke-dasharray="4 3"/><text x="151" y="16" font-size="10.5" fill="#4b3f29">' +
+      (G.lang === "ru" ? "Тропа" : "Trail") +
+      "</text>" +
+      '<circle cx="232" cy="12" r="4.4" fill="none" stroke="#842a24" stroke-width="1.8"/><text x="242" y="16" font-size="10.5" fill="#4b3f29">' +
+      T("mapHide") +
+      "</text>" +
+      '<text x="452" y="16" text-anchor="end" font-size="10" fill="#6b5a3a">' +
+      (G.lang === "ru" ? "М 1:4000" : "SCALE 1:4000") +
       "</text></g>" +
       cams +
       pin(
@@ -3089,11 +3578,19 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
         13,
         16,
       ) +
+      pin(
+        HIDE,
+        T("mapHide"),
+        '<circle r="4.2" fill="none" stroke="#842a24" stroke-width="2"/>',
+        17,
+        27,
+        "#842a24",
+      ) +
+      '<g transform="translate(372 409)"><path d="M0 0h71" stroke="#5f4a2a" stroke-width="2.4"/><path d="M0 -4v8M71 -4v8M35.5 -3v6" stroke="#5f4a2a" stroke-width="2"/><text x="35.5" y="-8" text-anchor="middle" font-size="10" fill="#5f4a2a">' +
+      TF("meter", 20) +
+      "</text></g>" +
       warn +
-      goalMark +
-      '<path d="M24 420h24" stroke="#705333" stroke-width="2.8" stroke-dasharray="5 3"/><text class="mapSmall" x="55" y="425" fill="#4b3f29">' +
-      T("mapTrail") +
-      "</text>";
+      goalMark;
     $("mapTitle").textContent = T("mapTitle");
     $("mapClose").textContent = T("close");
     $("mapReadout").textContent = goal
@@ -3193,6 +3690,9 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
         c.glint.visible = false;
         G.carried--;
         A.shut();
+        c.led.material = M(0x30ff60, 1);
+        uiT(() => (c.led.material = M(0xff3020, 1)), 900);
+        updateWallMap();
         mounts++;
         inv(TF("invCam", G.carried));
         setObj("objPlace", 6 - G.carried);
@@ -3220,6 +3720,7 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
         c.card = false;
         G.collected++;
         A.shut();
+        updateWallMap();
         c.led.material = M(0x30ff60, 1);
         uiT(() => (c.led.material = M(0xff3020, 1)), 900);
         setObj("objCollect", G.collected);
@@ -3466,6 +3967,8 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     G.nightOne = false;
     G.collected = 0;
     G.viewed = new Set();
+    G.marks = {};
+    G.stam = 1;
     G.ate = false;
     G.cooking = false;
     G.lit = false;
@@ -3513,18 +4016,22 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       say("q39");
     });
   }
+  let bigIdx = 0;
   function renderGrid() {
     const g = $("grid");
     g.innerHTML = "";
     const ph = G.photos[G.day] || [];
+    const marks = G.marks[G.day] || (G.marks[G.day] = new Set());
     ph.forEach((p, i) => {
       const d = document.createElement("div");
-      d.className = "th" + (G.viewed.has(i) ? " seen" : "") + (p.bad ? " bad" : "");
-      d.innerHTML = '<img src="' + p.url + '" alt=""><div>CAM_0' + (i + 1) + ".IMG</div>";
+      d.className =
+        "th" + (G.viewed.has(i) ? " seen" : "") + (p.bad ? " bad" : "") + (marks.has(i) ? " mark" : "");
+      d.innerHTML =
+        '<img src="' + p.url + '" alt=""><div>CAM_0' + (i + 1) + ".IMG</div>" + (marks.has(i) ? '<b class="mk">★</b>' : "");
       d.onclick = () => openPhoto(i);
       g.appendChild(d);
     });
-    $("pStat").textContent = TF("pStat", G.viewed.size);
+    $("pStat").textContent = TF("pStat", G.viewed.size) + (marks.size ? TF("pMarked", marks.size) : "");
     $("pHint").textContent = G.viewed.size < 6 ? T("pHint") : "";
     $("osClock").textContent = stampClock();
   }
@@ -3537,6 +4044,7 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
   function openPhoto(i) {
     const ph = G.photos[G.day],
       p = ph[i];
+    bigIdx = i;
     $("grid").style.display = "none";
     $("big").style.display = "block";
     $("bigImg").src = p.url;
@@ -3544,6 +4052,7 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     const first = !G.viewed.has(i);
     G.viewed.add(i);
     $("bigCap").textContent = photoCap(i);
+    syncPhotoMark(i);
     if (first) {
       const plan = PLAN[G.day],
         keys = (PHOTO_KEYS[G.day] || {})[i] || [];
@@ -3555,6 +4064,28 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     $("big").style.display = "block";
     $("grid").style.display = "none";
   }
+  function syncPhotoMark(i) {
+    const marks = G.marks[G.day] || (G.marks[G.day] = new Set());
+    const on = marks.has(i);
+    const b = $("bigMark");
+    b.textContent = T(on ? "bigUnmark" : "bigMark");
+    b.classList.toggle("on", on);
+  }
+  $("bigMark").onclick = () => {
+    const marks = G.marks[G.day] || (G.marks[G.day] = new Set());
+    const on = !marks.has(bigIdx);
+    if (on) {
+      marks.add(bigIdx);
+      toast(T("markToast"));
+      if (A.tn) A.tn(560, 0.07, 0.05, "square");
+    } else {
+      marks.delete(bigIdx);
+    }
+    syncPhotoMark(bigIdx);
+    renderGrid();
+    $("big").style.display = "block";
+    $("grid").style.display = "none";
+  };
   $("bigBack").onclick = () => {
     $("big").style.display = "none";
     $("grid").style.display = "grid";
@@ -4175,6 +4706,19 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
   const PW = 19,
     PH = 17,
     TS = 16;
+  /* mirroring the board gives three honestly different mazes from one layout */
+  const MAZES = [MAZE, MAZE.map((r) => [...r].reverse().join("")), [...MAZE].reverse()];
+  function spawnFruit() {
+    if (!pis.grid.length) return;
+    for (let k = 0; k < 90; k++) {
+      const x = 1 + Math.floor(R() * (PW - 2)),
+        y = 1 + Math.floor(R() * (PH - 2));
+      if (pis.grid[y][x] === ".") {
+        pis.fruit = { x: x, y: y };
+        return;
+      }
+    }
+  }
   const pis = {
     run: false,
     grid: [],
@@ -4196,6 +4740,7 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     snd: true,
     t: 0,
     glitch: false,
+    fruit: null,
   };
   const ECOL = [0x3fbf5a, 0xe03e2d, 0x8a5a3a, 0x3a7ad8];
   const PIS_SPAWNS = [
@@ -4206,7 +4751,12 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     [8, 5],
   ];
   function pisReset(full) {
-    pis.grid = MAZE.map((r) => r.split(""));
+    if (full) {
+      pis.score = 0;
+      pis.lives = 3;
+      pis.lvl = 1;
+    }
+    pis.grid = MAZES[(Math.max(1, pis.lvl) - 1) % MAZES.length].map((r) => r.split(""));
     pis.dots = 0;
     for (let y = 0; y < PH; y++)
       for (let x = 0; x < PW; x++) {
@@ -4240,11 +4790,8 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       });
     }
     pis.glitch = n === 5;
-    if (full) {
-      pis.score = 0;
-      pis.lives = 3;
-      pis.lvl = 1;
-    }
+    pis.fruit = null;
+    spawnFruit();
     pis.msg = pis.glitch ? T("pisGlitch") : "";
     pis.msgT = pis.glitch ? 3 : 0;
     pisHud();
@@ -4309,6 +4856,14 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       tcy = Math.round(cy2);
     let canStep = true;
     if (onTile(cx, cy2)) {
+      if (pis.fruit && pis.fruit.x === tcx && pis.fruit.y === tcy) {
+        pis.fruit = null;
+        pis.score += 150;
+        pis.fright = Math.max(pis.fright, 3);
+        if (pis.snd) A.tn(1040, 0.18, 0.08, "square", 1560);
+        uiT(spawnFruit, 5200);
+        pisHud();
+      }
       const c = pis.grid[tcy] && pis.grid[tcy][tcx];
       if (c === "." || c === "o") {
         pis.grid[tcy][tcx] = " ";
@@ -4413,13 +4968,21 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       for (let x = 0; x < PW; x++) {
         const t = pis.grid[y][x];
         if (t === "#") {
-          g.fillStyle = "#12301f";
+          g.fillStyle = "#0c2417";
           g.fillRect(x * TS, y * TS, TS, TS);
-          g.fillStyle = "#1d4a2e";
-          g.fillRect(x * TS + 1, y * TS + 1, TS - 2, 3);
+          g.fillStyle = "#17402a";
+          g.fillRect(x * TS + 1, y * TS + 1, TS - 2, TS - 2);
+          g.fillStyle = "#2a6440";
+          g.fillRect(x * TS + 2, y * TS + 2, TS - 4, 2);
+          g.fillStyle = "#08170e";
+          g.fillRect(x * TS + 2, y * TS + TS - 3, TS - 4, 1);
         } else if (t === ".") {
           g.fillStyle = "#ffb020";
           g.fillRect(x * TS + 6, y * TS + 6, 4, 4);
+          if (Math.floor(pis.t * 3 + x + y) % 5 === 0) {
+            g.fillStyle = "rgba(255,176,32,.25)";
+            g.fillRect(x * TS + 4, y * TS + 4, 8, 8);
+          }
         } else if (t === "o") {
           g.fillStyle = "#8cff9e";
           g.beginPath();
@@ -4427,6 +4990,21 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
           g.fill();
         }
       }
+    if (pis.fruit) {
+      const fx = pis.fruit.x * TS + 8,
+        fy = pis.fruit.y * TS + 8;
+      g.fillStyle = "#e8465a";
+      g.beginPath();
+      g.arc(fx - 2, fy + 1, 3.6, 0, PI * 2);
+      g.arc(fx + 3.2, fy + 2.2, 3.1, 0, PI * 2);
+      g.fill();
+      g.strokeStyle = "#8cff9e";
+      g.lineWidth = 1.4;
+      g.beginPath();
+      g.moveTo(fx, fy - 2);
+      g.quadraticCurveTo(fx + 2, fy - 8, fx + 6, fy - 8);
+      g.stroke();
+    }
     pis.en.forEach((e) => {
       const x = e.fx * TS + 8,
         y = e.fy * TS + 8;
@@ -4513,6 +5091,15 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       g.fillStyle = "rgba(224,62,45,.25)";
       g.fillRect(0, R() * c.height, c.width, 6);
     }
+    g.globalAlpha = 0.055;
+    g.fillStyle = "#000";
+    for (let sy = 0; sy < c.height; sy += 3) g.fillRect(0, sy, c.width, 1);
+    g.globalAlpha = 1;
+    const vg = g.createRadialGradient(c.width / 2, c.height / 2, c.height * 0.28, c.width / 2, c.height / 2, c.height * 0.72);
+    vg.addColorStop(0, "rgba(0,0,0,0)");
+    vg.addColorStop(1, "rgba(0,0,0,.5)");
+    g.fillStyle = vg;
+    g.fillRect(0, 0, c.width, c.height);
   }
   $("pisStart").onclick = () => {
     pisReset(true);
@@ -4545,7 +5132,10 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       p.stun -= dt;
     }
     const chase = G.phase === "chase";
-    const spd = (chase ? (G.inp.run ? 7.2 : 3.4) : G.inp.run ? 6 : 3.6) * (p.stun > 0 ? 0 : 1);
+    const moving = Math.abs(G.inp.x) + Math.abs(G.inp.y) > 0.04;
+    const sprint = G.inp.run && moving && G.stam > 0.02 && p.stun <= 0;
+    G.stam = clamp(G.stam + (sprint ? -dt / (chase ? 4.6 : 6.4) : dt / (chase ? 9 : 6.5)), 0, 1);
+    const spd = (chase ? (sprint ? 8.4 : 3.4) : sprint ? 6.7 : 3.6) * (p.stun > 0 ? 0 : 1);
     let ix = G.inp.x,
       iy = G.inp.y;
     const L = Math.hypot(ix, iy);
@@ -4600,7 +5190,7 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       G.stepT -= dt;
       if (G.stepT <= 0) {
         G.stepT = G.inp.run ? 0.32 : 0.5;
-        A.step(G.inp.run, G.inside);
+        A.step(sprint, G.inside);
       }
     }
     const eye = G.inside ? 2.15 : 1.68;
@@ -5019,6 +5609,8 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     G.carried = 6;
     G.collected = 0;
     G.viewed = new Set();
+    G.marks = {};
+    G.stam = 1;
     G.photos = {};
     G.flash = false;
     G.charge = 1;
@@ -5212,6 +5804,7 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
           cam.updateProjectionMatrix();
         }
       }
+      renderStamina();
       subTick();
       A.amb(dt);
       envTick(dt);
