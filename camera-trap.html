@@ -2010,55 +2010,142 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
   });
   /* painted aluminium coachwork: brushed streaks, rivets and grime */
   const rvTex = ptex(
-    256,
-    256,
+    512,
+    512,
     (g, w, h) => {
-      g.fillStyle = "#d6d2ca";
+      /* near-white base: the mesh colour tints it, so the paint still matches
+         the rest of the shell */
+      const grd = g.createLinearGradient(0, 0, 0, h);
+      grd.addColorStop(0, "#f4f1e8");
+      grd.addColorStop(0.55, "#e6e2d6");
+      grd.addColorStop(1, "#cfc8b6");
+      g.fillStyle = grd;
       g.fillRect(0, 0, w, h);
-      for (let i = 0; i < 220; i++) {
+      /* brushed aluminium grain */
+      for (let i = 0; i < 900; i++) {
         const y = R() * h,
-          l = 10 + R() * 90,
           x = R() * w,
-          v = 170 + Math.floor(R() * 70);
-        g.strokeStyle = "rgba(" + v + "," + v + "," + (v - 6) + ",.35)";
-        g.lineWidth = 0.6 + R() * 1.2;
+          l = 16 + R() * 150,
+          v = 200 + Math.floor(R() * 55);
+        g.strokeStyle = "rgba(" + v + "," + v + "," + (v - 8) + ",.22)";
+        g.lineWidth = 0.5 + R() * 1.1;
         g.beginPath();
         g.moveTo(x, y);
-        g.lineTo(x + l, y + (R() - 0.5) * 2);
+        g.lineTo(x + l, y + (R() - 0.5) * 1.6);
         g.stroke();
       }
-      for (let i = 0; i < 22; i++) {
-        const x = R() * w,
-          y = R() * h,
-          r = 10 + R() * 40;
-        const gr = g.createRadialGradient(x, y, 0, x, y, r);
-        gr.addColorStop(0, "rgba(120,116,102,.16)");
-        gr.addColorStop(1, "rgba(0,0,0,0)");
-        g.fillStyle = gr;
-        g.fillRect(x - r, y - r, r * 2, r * 2);
-      }
-      g.fillStyle = "rgba(96,94,86,.16)";
-      for (let i = 0; i < 3; i++)
-        for (let k = 0; k < 18; k++) {
-          g.beginPath();
-          g.arc(12 + k * 13.5, 24 + i * 84, 1.1, 0, 6.3);
-          g.fill();
+      /* panel seams: vertical joints plus one waistline joint */
+      const seamV = (x) => {
+        g.fillStyle = "rgba(70,66,58,.55)";
+        g.fillRect(x - 1, 0, 2, h);
+        g.fillStyle = "rgba(255,252,240,.5)";
+        g.fillRect(x + 1, 0, 1, h);
+        g.fillStyle = "rgba(120,112,96,.18)";
+        g.fillRect(x + 2, 0, 5, h);
+      };
+      const seamH = (y) => {
+        g.fillStyle = "rgba(70,66,58,.5)";
+        g.fillRect(0, y - 1, w, 2);
+        g.fillStyle = "rgba(255,252,240,.45)";
+        g.fillRect(0, y + 1, w, 1);
+        g.fillStyle = "rgba(120,112,96,.16)";
+        g.fillRect(0, y + 2, w, 6);
+      };
+      for (const x of [128, 256, 384]) seamV(x);
+      seamV(w - 1);
+      seamH(256);
+      /* rivet lines either side of every seam */
+      const rivet = (x, y, r) => {
+        g.fillStyle = "rgba(64,60,52,.5)";
+        g.beginPath();
+        g.arc(x, y, r, 0, 6.3);
+        g.fill();
+        g.fillStyle = "rgba(255,253,244,.7)";
+        g.beginPath();
+        g.arc(x - r * 0.28, y - r * 0.3, r * 0.5, 0, 6.3);
+        g.fill();
+      };
+      for (const x of [128, 256, 384, w - 1])
+        for (let y = 12; y < h; y += 24) {
+          rivet(x - 7, y, 2.6);
+          rivet(x + 7, y, 2.6);
         }
-      speck(g, w, h, 700, (g, x, y, r) => {
-        const v = 60 + Math.floor(R() * 90);
-        g.fillStyle = "rgba(" + v + "," + v + "," + (v - 6) + ",.3)";
-        g.fillRect(x, y, r * 0.7, r * 0.7);
+      for (let x = 12; x < w; x += 26) {
+        rivet(x, 249, 2.6);
+        rivet(x, 263, 2.6);
+      }
+      /* road grime washed up the lower panels, with drip trails */
+      const dirt = g.createLinearGradient(0, h * 0.55, 0, h);
+      dirt.addColorStop(0, "rgba(88,78,58,0)");
+      dirt.addColorStop(1, "rgba(74,66,48,.5)");
+      g.fillStyle = dirt;
+      g.fillRect(0, h * 0.55, w, h * 0.45);
+      for (let i = 0; i < 90; i++) {
+        const x = R() * w,
+          y = h * (0.3 + R() * 0.6);
+        g.strokeStyle =
+          "rgba(70,62,46," + (0.05 + R() * 0.12).toFixed(3) + ")";
+        g.lineWidth = 1 + R() * 2.5;
+        g.beginPath();
+        g.moveTo(x, y);
+        g.lineTo(x + (R() - 0.5) * 3, y + 20 + R() * 70);
+        g.stroke();
+      }
+      /* paint chips and rust freckles, mostly low down */
+      speck(g, w, h, 260, (g, x, y, r) => {
+        if (y < h * 0.5 && R() > 0.25) return;
+        g.fillStyle =
+          "rgba(" +
+          (98 + Math.floor(R() * 40)) +
+          "," +
+          (72 + Math.floor(R() * 30)) +
+          ",46,.55)";
+        g.beginPath();
+        g.arc(x, y, r * 0.55, 0, 6.3);
+        g.fill();
+      });
+      speck(g, w, h, 900, (g, x, y, r) => {
+        const v = 80 + Math.floor(R() * 70);
+        g.fillStyle = "rgba(" + v + "," + v + "," + (v - 6) + ",.22)";
+        g.fillRect(x, y, r * 0.6, r * 0.6);
       });
     },
-    2,
-    2,
+    1,
+    1,
   );
   const MC = new Map();
   function TM(c, tex, opts) {
-    /* Lambert: the forest has to stay cheap enough to render at speed */
-    return new THREE.MeshLambertMaterial(
-      Object.assign({ color: c, map: tex || null }, opts || {}),
-    );
+    /* Lambert: the forest has to stay cheap enough to render at speed.  The
+       option bags were written for a PBR material, and Lambert has no
+       roughness/metalness channels, so drop them instead of letting three
+       warn about every textured material in the scene. */
+    const o = Object.assign({ color: c, map: tex || null }, opts || {});
+    delete o.roughness;
+    delete o.metalness;
+    return new THREE.MeshLambertMaterial(o);
+  }
+  /* A box face carries 0..1 UVs, so one copy of the skin was stretched over
+     the whole 6 m wall and the rivets turned into vague smudges.  Rewrite the
+     UVs per face so the texture keeps a constant real-world scale. */
+  function tileBoxUV(o, tile) {
+    const geo = o.geometry,
+      p = geo && geo.parameters,
+      uv = geo && geo.attributes && geo.attributes.uv;
+    if (!p || !p.width || !uv || !uv.count) return;
+    const T = tile || 1.15,
+      w = p.width,
+      h = p.height,
+      d = p.depth,
+      /* BoxGeometry face order: +X, -X, +Y, -Y, +Z, -Z */
+      du = [d, d, w, w, w, w],
+      dv = [h, h, d, d, h, h];
+    for (let f = 0; f < 6; f++)
+      for (let i = 0; i < 4; i++) {
+        const k = f * 4 + i;
+        if (k >= uv.count) continue;
+        uv.setXY(k, uv.getX(k) * (du[f] / T), uv.getY(k) * (dv[f] / T));
+      }
+    uv.needsUpdate = true;
   }
   function M(c, e) {
     const k = c + "|" + (e || 0);
@@ -3779,9 +3866,13 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       cabTexMat = TM(CAB, rvTex);
     rv.traverse((o) => {
       if (!o.isMesh) return;
-      if (o.material === M(SKIN)) o.material = skinTexMat;
-      else if (o.material === M(SKIN_D)) o.material = skinDMat;
-      else if (o.material === M(CAB)) o.material = cabTexMat;
+      let skin = null;
+      if (o.material === M(SKIN)) skin = skinTexMat;
+      else if (o.material === M(SKIN_D)) skin = skinDMat;
+      else if (o.material === M(CAB)) skin = cabTexMat;
+      if (!skin) return;
+      o.material = skin;
+      tileBoxUV(o, 1.15);
     });
     /* flatten the small live sub-trees first: each group keeps its own
        transform, but its 20-odd boxes become one or two meshes. */
