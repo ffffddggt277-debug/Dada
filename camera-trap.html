@@ -1750,7 +1750,7 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
   const RV_EXIT = { x: 1.8, z: 0.8 },
     FIRE_SITE = { x: 5.5, z: 5 },
     RV_BAT = { x: 0.54, z: -0.72 },
-    RV_MAP = { x: -0.25, z: 0.8 };
+    RV_MAP = { x: -0.85, z: 0.8 };
   const RV_LAP = { x: -1.6, z: -0.2 },
     RV_BED = { x: 2.1, z: 0 };
   const CD = new THREE.Vector2(DOOR.x - SITE.x, DOOR.z - SITE.z),
@@ -1775,7 +1775,12 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     { x: 52, z: -70, ax: 55, az: -75 },
   ];
   CAMS.forEach((c) => {
-    c.mount = new THREE.Vector3(c.x + (c.ax - c.x) * 0.06, 1.3, c.z + (c.az - c.z) * 0.06);
+    const _dl = Math.hypot(c.ax - c.x, c.az - c.z) || 1;
+    c.mount = new THREE.Vector3(
+      c.x + ((c.ax - c.x) / _dl) * 0.17,
+      1.62,
+      c.z + ((c.az - c.z) / _dl) * 0.17,
+    );
     c.aim = new THREE.Vector3(c.ax, 0, c.az);
     c.mounted = false;
     c.card = false;
@@ -2195,36 +2200,284 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     });
   }
   (function buildRV() {
-    bx(6.2, 2.5, 2.5, 0xb9b3a4, 0, 1.85, 0, rv);
-    bx(6.2, 0.22, 2.54, 0x8a5a3a, 0, 1.1, 0, rv);
-    bx(1.7, 1.6, 2.4, 0xa8a294, -3.8, 1.35, 0, rv);
-    bx(0.1, 1.1, 2.2, 0x1c2a26, -4.6, 1.7, 0, rv);
-    bx(6.2, 0.16, 2.5, 0x6d675c, 0, 3.14, 0, rv);
-    bx(0.9, 0.35, 0.9, 0x8f8a7e, 1.4, 3.35, 0, rv);
-    [
-      [-2.2, 1.35],
-      [-2.2, -1.35],
-      [2.2, 1.35],
-      [2.2, -1.35],
-    ].forEach((w) => {
-      const t = cy(0.55, 0.55, 0.35, 0x14171a, w[0], 0.55, w[1], rv, 12);
-      t.rotation.x = PI / 2;
+    /* The old body was one solid box. Every face pointed outwards, so standing
+       inside you looked straight through the wall into the forest. The shell is
+       separate panels now and the interior is built from the floor up. */
+    const SKIN = 0xb3ac9c,
+      SKIN_D = 0x8e8779,
+      TRIM = 0x6a6459,
+      METAL = 0x9d988c,
+      CAB = 0xa8a294;
+    const F = 0.86; /* interior floor */
+    const glassMat = new THREE.MeshLambertMaterial({
+      color: 0x243a38,
+      transparent: true,
+      opacity: 0.34,
+      side: THREE.DoubleSide,
     });
-    bx(1.0, 1.9, 0.08, 0x6f5b45, 1.8, 1.6, 1.27, rv);
-    bx(0.12, 0.12, 0.1, 0xd8c07a, 2.2, 1.6, 1.33, rv);
-    bx(1.5, 0.8, 0.06, 0x24302c, -1.2, 2.2, 1.26, rv);
-    bx(1.5, 0.8, 0.06, 0x24302c, -1.2, 2.2, -1.26, rv);
-    bx(1.2, 0.7, 0.06, 0x24302c, 1.6, 2.3, -1.26, rv);
-    bx(0.5, 0.3, 0.1, 0xffe9b0, -4.62, 1.2, 0.85, rv, 1);
-    bx(0.5, 0.3, 0.1, 0xffe9b0, -4.62, 1.2, -0.85, rv, 1);
-    bx(6, 0.12, 2.3, 0x4a4034, 0, 0.62, 0, rv);
-    bx(6, 0.1, 2.3, 0x5c5346, 0, 3.02, 0, rv);
-    bx(0.06, 1.7, 2.3, 0x6a6154, -2.95, 1.75, 0, rv);
-    bx(1.5, 0.08, 0.9, 0x6b5a42, -1.6, 1.35, -0.5, rv);
-    bx(0.1, 0.7, 0.1, 0x4a3d2c, -2.2, 1.0, -0.2, rv);
-    bx(0.1, 0.7, 0.1, 0x4a3d2c, -1.0, 1.0, -0.8, rv);
+    const glazing = (w, h, x, y, z) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), glassMat);
+      m.position.set(x, y, z);
+      rv.add(m);
+      return m;
+    };
+    /* ---- running gear -------------------------------------------------- */
+    bx(6.5, 0.14, 2.56, 0x2a2723, 0, 0.5, 0, rv);
+    bx(6.2, 0.36, 2.46, 0x7f7a6d, 0, 0.68, 0, rv);
+    bx(5.9, 0.04, 2.2, 0x4b3e31, 0, F, 0, rv);
+    bx(2.2, 0.02, 1.5, 0x3d3330, 0.2, F + 0.02, 0.05, rv);
+    for (let i = -5; i <= 5; i++) bx(0.025, 0.02, 2.2, 0x3a2f26, i * 0.55, F + 0.016, 0, rv);
+    [
+      [-2.2, 1.32],
+      [-2.2, -1.32],
+      [2.2, 1.32],
+      [2.2, -1.32],
+    ].forEach((w) => {
+      const tyre = cy(0.56, 0.56, 0.34, 0x14171a, w[0], 0.58, w[1], rv, 16);
+      tyre.rotation.x = PI / 2;
+      const hub = cy(0.27, 0.27, 0.36, 0x8b877c, w[0], 0.58, w[1], rv, 12);
+      hub.rotation.x = PI / 2;
+      cy(0.1, 0.1, 0.38, 0x5d5a52, w[0], 0.58, w[1], rv, 10).rotation.x = PI / 2;
+      bx(0.12, 0.5, 0.66, 0x1d1c1a, w[0], 0.52, w[1] * 1.16, rv);
+      bx(0.92, 0.1, 0.52, 0x34302b, w[0], 1.02, w[1] * 1.14, rv);
+    });
+    /* ---- shell ---------------------------------------------------------- */
+    /* right hand wall: two windows and the door */
+    bx(4.38, 1.0, 0.08, SKIN, -0.89, F + 0.5, 1.2, rv);
+    bx(0.78, 1.0, 0.08, SKIN, 2.69, F + 0.5, 1.2, rv);
+    bx(6.16, 0.4, 0.08, SKIN, 0, 2.82, 1.2, rv);
+    [
+      [-3.08, -2.7],
+      [-1.3, -0.25],
+      [0.95, 1.3],
+      [2.3, 3.08],
+    ].forEach((q) => bx(q[1] - q[0], 0.76, 0.08, SKIN, (q[0] + q[1]) / 2, 2.24, 1.2, rv));
+    /* left hand wall: one wide window */
+    bx(6.16, 1.0, 0.08, SKIN, 0, F + 0.5, -1.2, rv);
+    bx(6.16, 0.4, 0.08, SKIN, 0, 2.82, -1.2, rv);
+    bx(4.14, 0.76, 0.08, SKIN, -1.01, 2.24, -1.2, rv);
+    bx(0.94, 0.76, 0.08, SKIN, 2.61, 2.24, -1.2, rv);
+    /* rear wall + front bulkhead with a curtained cab opening */
+    bx(0.08, 2.16, 2.44, SKIN_D, 3.08, 1.94, 0, rv);
+    bx(0.08, 2.16, 0.9, SKIN_D, -3.0, 1.94, -0.79, rv);
+    bx(0.08, 2.16, 0.5, SKIN_D, -3.0, 1.94, 1.0, rv);
+    bx(0.08, 0.52, 1.1, SKIN_D, -3.0, 2.76, 0.2, rv);
+    for (let i = 0; i < 5; i++) {
+      const cw = 0.2;
+      bx(0.03, 1.58, cw, 0x4a2a2a, -2.93, 1.66, -0.24 + i * 0.22, rv);
+    }
+    /* ceiling and roof */
+    bx(6.1, 0.06, 2.36, 0x9b927f, 0, 2.96, 0, rv);
+    for (let i = -3; i <= 3; i++) bx(0.06, 0.05, 2.3, 0x7c7465, i * 0.82, 2.92, 0, rv);
+    bx(6.24, 0.14, 2.54, SKIN_D, 0, 3.06, 0, rv);
+    bx(6.24, 0.08, 0.1, 0xb0aa9a, 0, 3.12, 1.2, rv);
+    bx(6.24, 0.08, 0.1, 0xb0aa9a, 0, 3.12, -1.2, rv);
+    /* windows: frames, sills, glass, curtains */
+    [[-2.0, 1.4], [0.35, 1.2]].forEach((q) => {
+      const wx = q[0],
+        ww = q[1];
+      bx(ww + 0.16, 0.07, 0.11, TRIM, wx, 2.62, 1.2, rv);
+      bx(ww + 0.16, 0.07, 0.11, TRIM, wx, 1.86, 1.2, rv);
+      bx(0.07, 0.83, 0.11, TRIM, wx - ww / 2 - 0.04, 2.24, 1.2, rv);
+      bx(0.07, 0.83, 0.11, TRIM, wx + ww / 2 + 0.04, 2.24, 1.2, rv);
+      bx(ww + 0.1, 0.09, 0.16, 0x7a7164, wx, 1.8, 1.18, rv);
+      glazing(ww - 0.06, 0.7, wx, 2.24, 1.245);
+      bx(0.02, 0.66, 0.06, TRIM, wx, 2.24, 1.25, rv);
+      bx(0.5, 0.8, 0.03, 0x63363a, wx - ww / 2 + 0.26, 2.25, 1.19, rv);
+      bx(0.5, 0.8, 0.03, 0x63363a, wx + ww / 2 - 0.26, 2.25, 1.19, rv);
+    });
+    bx(1.18, 0.07, 0.11, TRIM, 1.6, 2.62, -1.2, rv);
+    bx(1.18, 0.07, 0.11, TRIM, 1.6, 1.86, -1.2, rv);
+    bx(0.07, 0.83, 0.11, TRIM, 1.02, 2.24, -1.2, rv);
+    bx(0.07, 0.83, 0.11, TRIM, 2.18, 2.24, -1.2, rv);
+    bx(1.1, 0.09, 0.16, 0x7a7164, 1.6, 1.8, -1.18, rv);
+    glazing(1.02, 0.7, 1.6, 2.24, -1.245);
+    bx(0.02, 0.66, 0.06, TRIM, 1.6, 2.24, -1.25, rv);
+    /* ---- doorway -------------------------------------------------------- */
+    bx(1.14, 0.1, 0.13, TRIM, 1.8, 2.66, 1.2, rv);
+    bx(0.1, 1.9, 0.13, TRIM, 1.26, 1.78, 1.2, rv);
+    bx(0.1, 1.9, 0.13, TRIM, 2.34, 1.78, 1.2, rv);
+    bx(1.1, 0.08, 0.2, 0x6a6459, 1.8, F - 0.01, 1.2, rv);
+    const doorG = new THREE.Group();
+    doorG.position.set(1.32, F, 1.16);
+    rv.add(doorG);
+    bx(0.98, 1.8, 0.06, 0x8c8678, 0.5, 0.9, 0, doorG);
+    bx(0.74, 0.66, 0.03, 0x18242a, 0.5, 1.46, 0.045, doorG);
+    bx(0.74, 0.1, 0.03, 0x2c3a40, 0.5, 1.0, 0.045, doorG);
+    bx(0.07, 0.05, 0.06, 0xc8b070, 0.92, 0.92, 0.07, doorG);
+    bx(0.05, 0.16, 0.05, 0x4a443c, 0.08, 0.96, 0.02, doorG);
+    doorG.rotation.y = -0.66;
+    bx(0.5, 0.05, 0.5, 0x5a5852, 1.8, 0.42, 1.5, rv);
+    bx(0.5, 0.32, 0.06, 0x5a5852, 1.8, 0.28, 1.75, rv);
+    bx(0.16, 0.1, 0.12, 0xffe9b0, 2.42, 2.2, 1.24, rv, 1);
+    sprite(glowAmber, 0.5, 2.42, 2.2, 1.3, rv, 0.5);
+    /* ---- cab, glass, lights -------------------------------------------- */
+    bx(1.7, 1.6, 2.4, CAB, -3.8, 1.35, 0, rv);
+    bx(1.5, 0.5, 2.2, 0xa19b8d, -3.9, 2.28, 0, rv);
+    bx(2.4, 0.34, 2.5, CAB, -4.1, 0.62, 0, rv);
+    const shield = bx(0.06, 0.86, 2.16, 0x223a3a, -4.68, 1.82, 0, rv);
+    shield.material = glassMat;
+    bx(0.07, 0.08, 2.16, 0x3a3833, -4.68, 2.28, 0, rv);
+    bx(0.07, 0.08, 2.16, 0x3a3833, -4.68, 1.36, 0, rv);
+    bx(0.05, 0.1, 0.05, 0x3a3833, -4.7, 1.8, 0, rv);
+    bx(0.06, 0.34, 1.5, 0x2a2a2a, -4.68, 1.12, 0, rv);
+    for (let i = 0; i < 4; i++) bx(0.05, 0.03, 1.44, 0x454540, -4.7, 1.02 + i * 0.08, 0, rv);
+    for (const z of [-0.84, 0.84]) {
+      bx(0.07, 0.24, 0.3, 0xfff2cc, -4.68, 1.3, z, rv, 0.5);
+      bx(0.07, 0.14, 0.22, 0xffb064, -4.68, 0.95, z, rv, 0.35);
+    }
+    bx(0.16, 0.22, 2.46, METAL, -4.74, 0.8, 0, rv);
+    bx(0.16, 0.18, 2.4, METAL, 3.22, 0.82, 0, rv);
+    const spare = cy(0.48, 0.48, 0.26, 0x181b1d, 3.28, 1.85, 0, rv, 14);
+    spare.rotation.z = PI / 2;
+    cy(0.23, 0.23, 0.28, 0x8b877c, 3.28, 1.85, 0, rv, 10).rotation.z = PI / 2;
+    for (const z of [-0.9, 0.9]) bx(0.06, 0.18, 0.16, 0xd4342a, 3.13, 1.3, z, rv, 0.35);
+    bx(0.03, 0.16, 0.42, 0xd8d2c0, 3.12, 0.9, 0, rv);
+    /* mirrors, cab steps, exhaust */
+    for (const z of [-1.42, 1.42]) {
+      cy(0.02, 0.02, 0.42, 0x4a4a46, -4.34, 2.02, z * 0.86, rv, 5).rotation.z = PI / 2.6;
+      bx(0.06, 0.24, 0.18, 0x2c2c2c, -4.36, 2.12, z, rv);
+      bx(0.5, 0.06, 0.34, 0x3a3833, -3.55, 0.55, z * 1.06, rv);
+    }
+    cy(0.045, 0.045, 1.1, 0x2a2a2a, 2.6, 0.28, 1.0, rv, 6).rotation.z = PI / 2;
+    /* roof: rack, jerry cans, rolled tarp */
+    bx(6.34, 0.16, 0.16, 0x8f8a80, 0, 3.26, 1.05, rv);
+    bx(6.34, 0.16, 0.16, 0x8f8a80, 0, 3.26, -1.05, rv);
+    for (let i = -2; i <= 2; i++) bx(0.08, 0.1, 2.1, 0x8f8a80, i * 1.1, 3.32, 0, rv);
+    for (const x of [-0.9, -0.3]) {
+      bx(0.34, 0.44, 0.24, 0x5c6a3c, x, 3.56, 0.62, rv);
+      bx(0.06, 0.1, 0.12, 0x3c4628, x, 3.8, 0.62, rv);
+      bx(0.36, 0.05, 0.26, 0x4a5530, x, 3.79, 0.62, rv);
+    }
+    const tarp = cy(0.17, 0.17, 1.5, 0x6a5f4a, 1.5, 3.5, -0.62, rv, 10);
+    tarp.rotation.z = PI / 2;
+    bx(0.92, 0.35, 0.9, 0x8f8a7e, 0.2, 3.42, 0, rv);
+    bx(0.7, 0.06, 0.7, 0x5f5b52, 0.2, 3.61, 0, rv);
+    /* ladder and awning cassette */
+    bx(0.06, 2.2, 0.06, METAL, 3.05, 2.05, 0.72, rv);
+    bx(0.06, 2.2, 0.06, METAL, 3.05, 2.05, 0.36, rv);
+    for (let i = 0; i < 6; i++) bx(0.05, 0.05, 0.4, METAL, 3.05, 1.1 + i * 0.36, 0.54, rv);
+    bx(4.6, 0.16, 0.2, 0x4a443c, -0.4, 3.02, -1.24, rv);
+    cy(0.13, 0.13, 4.4, 0x6b6355, -0.4, 3.02, -1.4, rv, 8).rotation.z = PI / 2;
+    /* ---- interior ------------------------------------------------------- */
+    /* galley along the left wall */
+    bx(1.62, 0.72, 0.62, 0x6b5a42, -2.16, F + 0.36, -0.82, rv);
+    bx(1.7, 0.07, 0.68, 0x4c4b46, -2.16, F + 0.74, -0.82, rv);
+    bx(1.7, 0.06, 0.06, 0x3a3936, -2.16, F + 0.7, -0.5, rv);
+    for (let i = 0; i < 2; i++) {
+      bx(0.72, 0.56, 0.03, 0x7d6a4e, -2.56 + i * 0.8, F + 0.36, -0.5, rv);
+      bx(0.16, 0.03, 0.03, METAL, -2.56 + i * 0.8, F + 0.5, -0.48, rv);
+    }
+    bx(0.54, 0.05, 0.4, 0xa8adae, -2.62, F + 0.78, -0.84, rv);
+    bx(0.44, 0.04, 0.3, 0x2a2d2c, -2.62, F + 0.77, -0.84, rv);
+    cy(0.018, 0.018, 0.28, METAL, -2.62, F + 0.92, -1.0, rv, 6);
+    bx(0.16, 0.03, 0.03, METAL, -2.62, F + 1.04, -0.94, rv);
+    bx(0.5, 0.04, 0.4, 0x24262a, -1.85, F + 0.78, -0.84, rv);
+    for (const o of [-0.12, 0.12]) {
+      cy(0.1, 0.11, 0.04, 0x14161a, -1.85 + o, F + 0.81, -0.84, rv, 12);
+      cy(0.055, 0.055, 0.05, 0x3a3a3a, -1.85 + o, F + 0.83, -0.84, rv, 8);
+    }
+    const kettle = cy(0.13, 0.16, 0.24, 0x9aa0a2, -1.98, F + 0.95, -0.84, rv, 12);
+    const spout = cy(0.026, 0.034, 0.2, 0x8d9395, -1.86, F + 1.0, -0.84, rv, 6);
+    spout.rotation.z = -0.9;
+    cy(0.1, 0.1, 0.03, 0x6f7477, -1.98, F + 1.08, -0.84, rv, 10);
+    bx(0.34, 0.02, 0.22, 0x8a6b47, -1.55, F + 0.8, -0.86, rv).rotation.y = 0.3;
+    for (let i = 0; i < 3; i++) cy(0.055, 0.05, 0.12, [0xd8d2c0, 0x8c6a4a, 0x6e8a7a][i], -2.5 + i * 0.22, F + 0.86, -0.72, rv, 8);
+    bx(0.26, 0.06, 0.2, 0x3a3a3a, -2.18, F + 0.9, -0.86, rv);
+    for (let i = 0; i < 3; i++) cy(0.04, 0.04, 0.16, 0x9a7a4a, -2.24 + i * 0.08, F + 1.0, -0.86, rv, 7);
+    /* shelf over the galley */
+    bx(1.7, 0.06, 0.28, 0x6b5a42, -2.16, 2.1, -1.02, rv);
+    for (const x of [-2.86, -1.46]) bx(0.05, 0.24, 0.05, 0x4a3d2c, x, 1.96, -1.06, rv);
+    for (let i = 0; i < 5; i++) cy(0.05, 0.05, 0.13, [0x9a7a4a, 0xa8462e, 0x7d8a5c, 0xc8b070, 0x8a6b47][i], -2.75 + i * 0.16, 2.19, -1.02, rv, 7);
+    /* fridge in the front corner */
+    bx(0.72, 1.46, 0.66, 0x9aa39a, -2.6, F + 0.73, 0.72, rv);
+    bx(0.05, 1.2, 0.05, 0x6d766d, -2.24, F + 0.75, 1.0, rv);
+    bx(0.76, 0.05, 0.7, 0x3d463c, -2.6, F + 1.48, 0.72, rv);
+    bx(0.3, 0.2, 0.02, 0xc8b070, -2.6, F + 1.22, 1.06, rv);
+    /* dinette: table, bench, stool */
+    bx(0.98, 0.06, 0.72, 0x7a6244, -1.55, 1.4, 0.12, rv);
+    bx(0.9, 0.02, 0.64, 0x8d7350, -1.55, 1.44, 0.12, rv);
+    cy(0.05, 0.05, 0.54, METAL, -1.55, 1.12, 0.12, rv, 8);
+    for (const x of [-1.55]) for (const z of [0.3, -0.06]) bx(0.06, 0.44, 0.06, 0x4a3d2c, x, 1.2, z, rv);
+    bx(1.0, 0.1, 0.42, 0x5a6350, -1.55, 1.2, 0.86, rv);
+    bx(1.0, 0.56, 0.1, 0x4f5746, -1.55, 1.5, 1.05, rv);
+    bx(0.9, 0.4, 0.34, 0x4a3d2c, -1.55, 0.96, 0.86, rv);
+    bx(0.44, 0.08, 0.4, 0x566050, -1.55, 1.14, 0.02, rv);
+    for (const x of [-1.55]) for (const z of [0.02]) bx(0.06, 0.4, 0.06, 0x4a3d2c, x, 0.94, z, rv);
+    /* bed in the back */
+    bx(1.2, 0.44, 1.9, 0x6b5a42, 2.42, F + 0.22, 0, rv);
+    bx(1.16, 0.18, 1.84, 0x8d9683, 2.42, F + 0.53, 0, rv);
+    bx(1.1, 0.1, 1.16, 0x76806f, 2.4, F + 0.64, 0.28, rv);
+    bx(0.52, 0.15, 0.34, 0xd6cfb8, 2.72, F + 0.67, -0.64, rv).rotation.y = 0.18;
+    bx(0.34, 0.12, 0.22, 0xc8bfa6, 2.7, F + 0.66, 0.72, rv);
+    bx(0.5, 0.02, 0.5, 0x2a2622, 2.42, F + 0.63, -0.7, rv).rotation.y = 0.3;
+    for (let i = 0; i < 2; i++) {
+      bx(0.56, 0.24, 0.03, 0x7d6a4e, 2.42, F + 0.16, -0.96 - i * 0.01, rv);
+      bx(0.14, 0.03, 0.03, METAL, 2.42, F + 0.2, -0.99, rv);
+    }
+    /* overhead lockers */
+    bx(1.9, 0.5, 0.34, 0x6b5a42, 2.0, 2.6, -1.0, rv);
+    for (let i = 0; i < 2; i++) bx(0.82, 0.38, 0.03, 0x7d6a4e, 1.62 + i * 0.92, 2.6, -0.83, rv);
+    bx(1.9, 0.5, 0.34, 0x6b5a42, -0.4, 2.6, 1.0, rv);
+    for (let i = 0; i < 2; i++) bx(0.82, 0.38, 0.03, 0x7d6a4e, -0.78 + i * 0.92, 2.6, 0.83, rv);
+    bx(1.8, 0.6, 0.32, 0x5f4f3a, 2.05, 2.55, 1.0, rv);
+    /* wall schematic, battery shelf, radio, clock */
+    const paper = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.86, 0.65),
+      new THREE.MeshBasicMaterial({ map: wallMapTex }),
+    );
+    paper.position.set(RV_MAP.x, 1.55, 1.152);
+    paper.rotation.y = PI;
+    paper.rotation.z = -0.035;
+    rv.add(paper);
+    bx(0.42, 0.03, 0.03, 0x4a3d2c, RV_MAP.x, 1.9, 1.15, rv).rotation.z = 0.02;
+    bx(0.42, 0.03, 0.03, 0x4a3d2c, RV_MAP.x, 1.22, 1.15, rv).rotation.z = -0.02;
+    bx(0.92, 0.09, 0.52, 0x6b5a42, RV_BAT.x, 1.27, RV_BAT.z, rv);
+    bx(0.13, 0.65, 0.13, 0x544633, RV_BAT.x - 0.28, 0.9, RV_BAT.z, rv);
+    const box = new THREE.Group();
+    box.position.set(RV_BAT.x, 1.32, RV_BAT.z);
+    rv.add(box);
+    bx(0.37, 0.05, 0.23, 0x9a7346, 0, 0.02, 0, box);
+    for (const x of [-0.18, 0.18]) bx(0.035, 0.13, 0.23, 0x9a7346, x, 0.065, 0, box);
+    for (const z of [-0.11, 0.11]) bx(0.37, 0.13, 0.035, 0xa57945, 0, 0.065, z, box);
+    for (let i = 0; i < BAT_SPARES; i++) {
+      const cell = new THREE.Group();
+      cell.position.set((i - 1.5) * 0.068, 0.059, 0);
+      box.add(cell);
+      cy(0.026, 0.026, 0.133, 0x292b29, 0, 0, 0, cell, 8).rotation.x = PI / 2;
+      cy(0.026, 0.026, 0.048, 0xca9448, 0, 0, -0.052, cell, 8).rotation.x = PI / 2;
+      spareMeshes.push(cell);
+    }
+    const torch = cy(0.035, 0.045, 0.24, 0x2b2f33, RV_BAT.x + 0.34, 1.4, RV_BAT.z - 0.02, rv, 8);
+    torch.rotation.z = PI / 2.2;
+    bx(0.32, 0.22, 0.06, 0x8a2f2a, RV_BAT.x - 0.38, 1.44, RV_BAT.z + 0.02, rv);
+    bx(0.12, 0.04, 0.02, 0xd8d2c0, RV_BAT.x - 0.38, 1.44, RV_BAT.z + 0.06, rv);
+    const radio = new THREE.Group();
+    radio.position.set(-1.35, 1.62, 0.66);
+    rv.add(radio);
+    bx(0.42, 0.24, 0.18, 0x2b2f33, 0, 0, 0, radio);
+    bx(0.16, 0.1, 0.02, 0x0e7f7b, -0.08, 0.03, 0.1, radio, 0.6);
+    cy(0.008, 0.008, 0.5, 0x9a9a9a, 0.16, 0.35, 0, radio, 5);
+    sp(0.02, 0xff3020, 0.13, 0.02, 0.1, radio, 1);
+    bx(0.05, 0.05, 0.03, 0xb8b2a6, 0.06, 0.02, 0.1, radio);
+    bx(0.12, 0.02, 0.12, 0x1c1f22, -0.12, -0.02, 0.1, radio);
+    /* clock, hooks, boots, notebook */
+    cy(0.15, 0.15, 0.04, 0xd8d2c0, 2.95, 2.52, -0.55, rv, 14).rotation.z = PI / 2;
+    bx(0.02, 0.11, 0.012, 0x2b2b2b, 2.97, 2.56, -0.55, rv);
+    bx(0.012, 0.012, 0.08, 0x2b2b2b, 2.97, 2.52, -0.5, rv);
+    for (let i = 0; i < 3; i++) {
+      bx(0.05, 0.1, 0.05, 0x544633, -0.2 + i * 0.26, 2.35, 1.14, rv);
+      bx(0.12, 0.34, 0.08, 0x3a3430, -0.2 + i * 0.26, 2.13, 1.14, rv);
+    }
+    bx(0.26, 0.14, 0.3, 0x2a2420, 1.92, F + 0.07, 1.02, rv).rotation.y = 0.3;
+    bx(0.26, 0.14, 0.3, 0x2a2420, 1.66, F + 0.07, 1.08, rv).rotation.y = -0.2;
+    bx(0.3, 0.02, 0.22, 0xd8d2c0, -0.55, 1.46, 0.12, rv).rotation.y = 0.4;
+    bx(0.02, 0.02, 0.16, 0x2b2b2b, -0.62, 1.47, 0.06, rv).rotation.y = 0.9;
+    bx(0.3, 0.42, 0.24, 0x6f7a5c, 2.9, F + 0.21, 0.72, rv);
+    bx(0.24, 0.06, 0.2, 0x4a5240, 2.9, F + 0.44, 0.72, rv);
+    /* laptop on the dinette */
     const lap = new THREE.Group();
-    lap.position.set(-1.6, 1.4, -0.5);
+    lap.position.set(-1.55, 1.44, 0.06);
     rv.add(lap);
     bx(0.62, 0.05, 0.44, 0x3c4046, 0, 0, 0, lap);
     const scr = bx(0.62, 0.42, 0.04, 0x0e7f7b, 0, 0.22, -0.2, lap, 1);
@@ -2247,124 +2500,37 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       return t;
     })();
     scr.material = new THREE.MeshBasicMaterial({ map: st });
-    bx(1.5, 0.35, 1.9, 0x5d6b52, 2.1, 0.85, 0, rv);
-    bx(1.4, 0.14, 1.8, 0x8e9c84, 2.1, 1.06, 0, rv);
-    bx(0.5, 0.14, 0.5, 0xd8d2c0, 2.6, 1.16, 0, rv);
-    bx(0.7, 0.9, 0.5, 0x6b5a42, -2.4, 1.1, 0.8, rv);
-    bx(0.3, 0.24, 0.2, 0x2b2f33, -2.4, 1.68, 0.8, rv);
-    const paper = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.86, 0.65),
-      new THREE.MeshBasicMaterial({ map: wallMapTex }),
-    );
-    paper.position.set(RV_MAP.x, 1.93, 1.19);
-    paper.rotation.y = PI;
-    paper.rotation.z = -0.035;
-    rv.add(paper);
-    bx(0.92, 0.09, 0.52, 0x6b5a42, RV_BAT.x, 1.27, RV_BAT.z, rv);
-    bx(0.13, 0.65, 0.13, 0x544633, RV_BAT.x - 0.28, 0.9, RV_BAT.z, rv);
-    const box = new THREE.Group();
-    box.position.set(RV_BAT.x, 1.32, RV_BAT.z);
-    rv.add(box);
-    bx(0.37, 0.05, 0.23, 0x9a7346, 0, 0.02, 0, box);
-    for (const x of [-0.18, 0.18]) bx(0.035, 0.13, 0.23, 0x9a7346, x, 0.065, 0, box);
-    for (const z of [-0.11, 0.11]) bx(0.37, 0.13, 0.035, 0xa57945, 0, 0.065, z, box);
-    for (let i = 0; i < BAT_SPARES; i++) {
-      const cell = new THREE.Group();
-      cell.position.set((i - 1.5) * 0.068, 0.059, 0);
-      box.add(cell);
-      cy(0.026, 0.026, 0.133, 0x292b29, 0, 0, 0, cell, 8).rotation.x = PI / 2;
-      cy(0.026, 0.026, 0.048, 0xca9448, 0, 0, -0.052, cell, 8).rotation.x = PI / 2;
-      spareMeshes.push(cell);
+    /* wall cladding, chair rail and seams: the shell alone reads as a box */
+    for (const z of [1.146, -1.146]) {
+      bx(5.82, 0.34, 0.025, 0x6f5a40, -0.06, 1.03, z, rv);
+      bx(5.86, 0.05, 0.06, 0x4a3d2c, -0.04, 1.22, z > 0 ? 1.14 : -1.14, rv);
+      bx(5.86, 0.04, 0.05, 0x4a3d2c, -0.04, 2.72, z > 0 ? 1.14 : -1.14, rv);
+      for (let i = -4; i <= 4; i++) bx(0.014, 0.3, 0.012, 0x4f4232, i * 0.68, 1.03, z, rv);
     }
-    /* --- exterior trim: bumpers, rack, ladder, awning, lights --- */
-    bx(6.34, 0.16, 0.16, 0x8f8a80, 0, 3.26, 1.05, rv);
-    bx(6.34, 0.16, 0.16, 0x8f8a80, 0, 3.26, -1.05, rv);
-    for (let i = -2; i <= 2; i++) bx(0.08, 0.1, 2.1, 0x8f8a80, i * 1.1, 3.3, 0, rv);
-    bx(0.3, 0.26, 2.66, 0x2c2823, 3.2, 0.86, 0, rv);
-    bx(0.3, 0.26, 2.66, 0x2c2823, -3.2, 0.86, 0, rv);
-    bx(0.7, 0.24, 0.9, 0x7d7669, 3.2, 2.0, 0, rv);
-    bx(0.12, 0.06, 0.06, 0xd8c07a, 3.28, 1.9, 0.42, rv, 0.4);
-    bx(0.12, 0.06, 0.06, 0xd8c07a, 3.28, 1.9, -0.42, rv, 0.4);
-    /* ladder to the roof */
-    bx(0.06, 2.2, 0.06, 0x9a958a, 3.05, 2.05, 0.72, rv);
-    bx(0.06, 2.2, 0.06, 0x9a958a, 3.05, 2.05, 0.36, rv);
-    for (let i = 0; i < 6; i++) bx(0.05, 0.05, 0.4, 0x9a958a, 3.05, 1.1 + i * 0.36, 0.54, rv);
-    /* awning cassette */
-    bx(4.6, 0.16, 0.2, 0x4a443c, -0.4, 3.0, -1.24, rv);
-    /* side windows with frames and curtains */
-    [-2.0, 0.2].forEach((wx) => {
-      bx(1.44, 0.9, 0.05, 0x2a2621, wx, 2.2, 1.28, rv);
-      bx(1.3, 0.76, 0.02, 0x162024, wx, 2.2, 1.31, rv);
-      bx(0.62, 0.8, 0.03, 0x6b3a3a, wx - 0.34, 2.2, 1.33, rv);
-      bx(0.62, 0.8, 0.03, 0x6b3a3a, wx + 0.34, 2.2, 1.33, rv);
-    });
-    bx(1.2, 0.74, 0.05, 0x2a2621, 1.6, 2.3, -1.28, rv);
-    bx(1.06, 0.62, 0.02, 0x162024, 1.6, 2.3, -1.31, rv);
-    /* door frame + step + light */
-    bx(1.18, 2.02, 0.05, 0x33302a, 1.8, 1.6, 1.28, rv);
-    bx(0.9, 0.5, 0.04, 0x18242a, 1.8, 2.2, 1.31, rv);
-    bx(0.34, 0.05, 0.34, 0x6a6258, 1.8, 0.5, 1.85, rv);
-    bx(0.16, 0.1, 0.1, 0xffe9b0, 1.3, 2.34, 1.34, rv, 1);
-    /* wheels: rubber + hub, mud flaps */
-    [
-      [-2.2, 1.35],
-      [-2.2, -1.35],
-      [2.2, 1.35],
-      [2.2, -1.35],
-    ].forEach((w) => {
-      const tyre = cy(0.56, 0.56, 0.34, 0x14171a, w[0], 0.56, w[1], rv, 14);
-      tyre.rotation.x = PI / 2;
-      const hub = cy(0.26, 0.26, 0.36, 0x8b877c, w[0], 0.56, w[1], rv, 10);
-      hub.rotation.x = PI / 2;
-      bx(0.1, 0.5, 0.62, 0x1d1c1a, w[0], 0.5, w[1] * 1.18, rv);
-    });
-    /* spare wheel on the back */
-    const spare = cy(0.48, 0.48, 0.26, 0x181b1d, 3.28, 1.85, 0, rv, 12);
-    spare.rotation.z = PI / 2;
-    /* --- interior: rug, bedding, kitchen, radio, clock --- */
-    bx(5.5, 0.02, 2.0, 0x4a3b33, 0, 0.66, 0, rv);
-    bx(1.04, 0.07, 1.6, 0x5a6350, 0.4, 0.68, 0, rv);
-    /* bed */
-    bx(1.46, 0.12, 1.86, 0x3a4a3c, 2.1, 1.2, 0, rv);
-    bx(1.3, 0.18, 1.7, 0x7d8878, 2.1, 1.28, 0, rv);
-    bx(1.22, 0.1, 1.2, 0x8f9c88, 2.12, 1.36, 0.22, rv);
-    bx(0.62, 0.16, 0.5, 0xd8d2c0, 2.55, 1.4, -0.6, rv).rotation.y = 0.2;
-    /* kitchen: stove, kettle, sink, mugs, cans */
-    bx(1.9, 0.1, 0.86, 0x3b3b38, -1.9, 1.36, -0.52, rv);
-    bx(0.7, 0.06, 0.7, 0x24262a, -2.2, 1.42, -0.52, rv);
-    cy(0.12, 0.14, 0.06, 0x111214, -2.32, 1.46, -0.52, rv, 10);
-    cy(0.12, 0.14, 0.06, 0x111214, -2.06, 1.46, -0.52, rv, 10);
-    const kettle = cy(0.16, 0.2, 0.28, 0x8a8f92, -2.2, 1.58, -0.52, rv, 10);
-    cy(0.03, 0.03, 0.24, 0x6d7275, -2.06, 1.63, -0.52, rv, 5).rotation.z = -0.7;
-    const cupA = cy(0.06, 0.05, 0.11, 0xd8d2c0, -1.62, 1.46, -0.66, rv, 8);
-    const cupB = cy(0.06, 0.05, 0.11, 0x8c6a4a, -1.46, 1.46, -0.44, rv, 8);
-    bx(0.5, 0.12, 0.3, 0x7a7f82, -1.72, 1.42, -0.3, rv);
-    bx(1.3, 0.06, 0.3, 0x5a4a36, -1.5, 2.15, -1.2, rv);
-    for (let i = 0; i < 5; i++) cy(0.05, 0.05, 0.12, 0x9a7a4a, -2.0 + i * 0.18, 2.24, -1.2, rv, 7);
-    /* radio on the shelf with its own antenna */
-    const radio = new THREE.Group();
-    radio.position.set(-1.35, 1.62, 0.66);
-    rv.add(radio);
-    bx(0.42, 0.24, 0.18, 0x2b2f33, 0, 0, 0, radio);
-    bx(0.16, 0.1, 0.02, 0x0e7f7b, -0.08, 0.03, 0.1, radio, 0.6);
-    cy(0.008, 0.008, 0.5, 0x9a9a9a, 0.16, 0.35, 0, radio, 5);
-    sp(0.02, 0xff3020, 0.13, 0.02, 0.1, radio, 1);
-    bx(0.05, 0.05, 0.03, 0xb8b2a6, 0.06, 0.02, 0.1, radio);
-    /* wall clock */
-    cy(0.16, 0.16, 0.03, 0xd8d2c0, 0.4, 2.55, 1.2, rv, 12).rotation.x = PI / 2;
-    bx(0.01, 0.12, 0.01, 0x2b2b2b, 0.4, 2.6, 1.22, rv);
-    bx(0.09, 0.01, 0.01, 0x2b2b2b, 0.45, 2.55, 1.22, rv);
-    /* fridge + pantry */
-    bx(0.85, 1.5, 0.6, 0x9aa39a, -2.5, 1.4, -0.75, rv);
-    bx(0.06, 1.2, 0.06, 0x6d766d, -2.1, 1.4, -0.72, rv);
-    bx(0.9, 0.06, 0.62, 0x3d463c, -2.5, 2.16, -0.75, rv);
-    /* laptop screen glow */
-    const lapGlow = new THREE.PointLight(0x6fe6d0, 0.35, 1.6, 2);
-    lapGlow.position.set(-1.6, 1.7, -0.5);
+    bx(0.025, 2.2, 2.3, 0x6f5a40, 3.06, 1.96, 0, rv);
+    for (const z of [-0.72, 0, 0.72]) bx(0.012, 2.14, 0.012, 0x4f4232, 3.045, 1.96, z, rv);
+    bx(1.3, 0.9, 0.02, 0x7d6a4e, 2.4, 2.24, 0.62, rv).rotation.y = -0.02;
+    /* ---- lights --------------------------------------------------------- */
+    const shade = new THREE.Group();
+    shade.position.set(0, 2.9, 0);
+    rv.add(shade);
+    cy(0.16, 0.22, 0.14, 0xd8cdb0, 0, 0, 0, shade, 12);
+    sp(0.06, 0xfff0c0, 0, -0.07, 0, shade, 1);
+    cy(0.01, 0.01, 0.16, 0x4a443c, 0, 0.1, 0, shade, 4);
+    bx(0.5, 0.03, 0.05, 0xffd9a0, -2.4, 2.9, 0, rv);
+    bx(0.5, 0.03, 0.05, 0xffd9a0, 2.4, 2.9, 0, rv);
+    const lapGlow = new THREE.PointLight(0x6fe6d0, 0.55, 1.9, 2);
+    lapGlow.position.set(-1.55, 1.7, 0.06);
     rv.add(lapGlow);
-    const lamp = new THREE.PointLight(0xffd9a0, 0.75, 6, 2);
-    lamp.position.set(0, 2.6, 0);
+    const lamp = new THREE.PointLight(0xffd9a0, 1.15, 7, 2);
+    lamp.position.set(0, 2.66, 0);
     rv.add(lamp);
+    const galleyLight = new THREE.PointLight(0xffcf9a, 0.55, 3.2, 2);
+    galleyLight.position.set(-2.3, 2.3, -0.55);
+    rv.add(galleyLight);
+    const bedLight = new THREE.PointLight(0xffb27a, 0.4, 2.6, 2);
+    bedLight.position.set(2.75, 2.2, 0.55);
+    rv.add(bedLight);
     const hl1 = new THREE.SpotLight(0xfff6d8, 0, 45, 0.5, 0.4, 1.4);
     hl1.position.set(-4.6, 1.2, 0.85);
     rv.add(hl1);
@@ -2376,6 +2542,7 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     hl2.target.position.set(-24, 0.4, -0.85);
     rv.add(hl2.target);
     rv.userData.hl = [hl1, hl2];
+    rv.userData.lamp = shade;
   })();
 
   /* fire */
@@ -2421,32 +2588,173 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
   const stick = cy(0.02, 0.02, 1.1, 0x6b5a42, 0, 0, 0, fireG);
   stick.rotation.z = PI / 2.6;
   stick.visible = false;
+  /* flame body, embers and smoke, animated in the loop */
+  const flameG = new THREE.Group();
+  flameG.position.set(0, 0.16, 0);
+  fireG.add(flameG);
+  const flameCols = [0xff4a10, 0xff6a18, 0xff8a22, 0xffb040, 0xffd070];
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * PI * 2;
+    const rad = i === 0 ? 0 : 0.13 + R() * 0.07;
+    const h = i === 0 ? 1.15 : 0.6 + R() * 0.45;
+    const m = new THREE.Mesh(
+      new THREE.ConeGeometry(0.1 + R() * 0.06, h, 6),
+      new THREE.MeshBasicMaterial({
+        color: flameCols[i % flameCols.length],
+        transparent: true,
+        opacity: 0.8,
+        depthWrite: false,
+      }),
+    );
+    m.position.set(Math.cos(a) * rad, 0.28 + h / 2, Math.sin(a) * rad);
+    m.rotation.z = Math.cos(a) * 0.14;
+    m.rotation.x = Math.sin(a) * 0.14;
+    flameG.add(m);
+  }
+  flameG.visible = false;
+  const embers = (() => {
+    const n = 26,
+      geo = new THREE.BufferGeometry(),
+      p = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      p[i * 3] = (R() - 0.5) * 0.6;
+      p[i * 3 + 1] = R() * 1.4;
+      p[i * 3 + 2] = (R() - 0.5) * 0.6;
+    }
+    geo.setAttribute("position", new THREE.BufferAttribute(p, 3));
+    const pts = new THREE.Points(
+      geo,
+      new THREE.PointsMaterial({
+        color: 0xff9a3a,
+        map: glowAmber,
+        size: 0.06,
+        transparent: true,
+        opacity: 0.85,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    pts.visible = false;
+    fireG.add(pts);
+    return pts;
+  })();
+  const smokeTex = glowTex("rgba(150,152,148,1)");
+  const smokePuffs = [];
+  for (let i = 0; i < 5; i++) {
+    const sm = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: smokeTex,
+        transparent: true,
+        opacity: 0.2,
+        depthWrite: false,
+        color: 0x9aa09a,
+      }),
+    );
+    sm.position.set((R() - 0.5) * 0.5, 1.1 + i * 0.45, (R() - 0.5) * 0.5);
+    sm.scale.setScalar(0.7 + i * 0.25);
+    sm.visible = false;
+    fireG.add(sm);
+    smokePuffs.push(sm);
+  }
+  /* a bed of glowing coals */
+  const coals = new THREE.Group();
+  coals.position.y = 0.1;
+  fireG.add(coals);
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * PI * 2 + R() * 0.4;
+    sp(0.09 + R() * 0.05, 0xff4a10, i % 3 ? Math.cos(a) * 0.26 : 0, R() * 0.05, Math.sin(a) * 0.26, coals, 0.9);
+  }
 
-  /* camera traps */
+  /* ---------- camera traps on posts ---------- */
   const glints = [];
+  function camPlate(i) {
+    const c = document.createElement("canvas");
+    c.width = 128;
+    c.height = 48;
+    const g = c.getContext("2d");
+    g.fillStyle = "#23271f";
+    g.fillRect(0, 0, 128, 48);
+    g.strokeStyle = "#8a9580";
+    g.lineWidth = 3;
+    g.strokeRect(2, 2, 124, 44);
+    g.fillStyle = "#d8e2c8";
+    g.font = "700 24px monospace";
+    g.textAlign = "center";
+    g.fillText("CAM 0" + (i + 1), 64, 33);
+    const t = new THREE.CanvasTexture(c);
+    t.encoding = THREE.sRGBEncoding;
+    return t;
+  }
   CAMS.forEach((c, i) => {
-    const band = cy(0.38, 0.38, 0.24, 0xe8e4d8, c.x, 1.55, c.z, sc, 10);
-    band.material = M(0xe8e4d8, 0.22);
+    /* The post is there from the start; only the unit appears when it is hung. */
+    const pole = new THREE.Group();
+    pole.position.set(c.x, 0, c.z);
+    pole.rotation.y = R() * PI;
+    sc.add(pole);
+    cy(0.2, 0.28, 0.14, 0x63625b, 0, 0.07, 0, pole, 10);
+    cy(0.11, 0.14, 0.26, 0x4d4a44, 0, 0.22, 0, pole, 10);
+    const post = cy(0.06, 0.085, 2.34, 0x5c4832, 0, 1.3, 0, pole, 9);
+    post.rotation.y = 0.3;
+    for (const y of [1.44, 1.72]) cy(0.078, 0.078, 0.05, 0x2b2b2b, 0, y, 0, pole, 10);
+    for (const y of [0.7, 2.0]) cy(0.066, 0.066, 0.03, 0x4f4436, 0, y, 0, pole, 8);
+    sp(0.1, 0x3d3226, 0.05, 1.12, 0.03, pole);
+    /* small solar panel and its cable */
+    cy(0.075, 0.075, 0.06, 0x4a4a42, 0, 2.42, 0, pole, 8);
+    const panel = bx(0.42, 0.03, 0.3, 0x1b2b3c, 0, 2.47, 0.03, pole);
+    panel.rotation.x = -0.1;
+    bx(0.35, 0.006, 0.23, 0x2f4f6e, 0, 2.487, 0.03, pole, 0.25).rotation.x = -0.1;
+    for (const z of [-0.1, 0.1]) bx(0.05, 0.1, 0.04, 0x55554c, 0, 2.4, 0.03 + z, pole);
+    /* junction box and drooping cable */
+    bx(0.18, 0.24, 0.12, 0x3a4034, 0.03, 0.85, 0.06, pole);
+    cy(0.008, 0.008, 1.3, 0x1a1a1a, 0.02, 1.5, 0.04, pole, 4).rotation.z = 0.06;
+    /* rocks and weeds at the base */
+    for (let k = 0; k < 3; k++) {
+      const a = R() * PI * 2;
+      sp(0.1 + R() * 0.1, 0x3b4036, Math.cos(a) * 0.26, 0.06, Math.sin(a) * 0.26, pole);
+    }
+    cy(0.09, 0.13, 0.34, 0x24402a, 0.25, 0.17, -0.2, pole, 5).rotation.z = 0.2;
+    /* the unit itself */
     const g = new THREE.Group();
     g.position.copy(c.mount);
-    g.lookAt(c.aim.x, 1.1, c.aim.z);
+    g.lookAt(c.aim.x, 1.1, c.az);
     sc.add(g);
-    bx(0.27, 0.34, 0.16, 0x2b3528, 0, 0, 0, g);
-    bx(0.29, 0.06, 0.18, 0x1d251c, 0, 0.19, 0, g);
-    cy(0.075, 0.085, 0.11, 0x0f1315, 0, 0.02, 0.12, g, 12).rotation.x = PI / 2;
-    cy(0.05, 0.05, 0.03, 0x2a6f7a, 0, 0.02, 0.175, g, 12).rotation.x = PI / 2;
-    for (let k = 0; k < 6; k++) {
-      const a = (k / 6) * PI * 2;
-      sp(0.014, 0x8a1a12, Math.cos(a) * 0.078, 0.02 + Math.sin(a) * 0.078, 0.16, g);
+    /* bracket back to the post */
+    bx(0.05, 0.05, 0.3, 0x9a958a, 0, -0.02, -0.1, g);
+    cy(0.09, 0.09, 0.08, 0x2b2b2b, 0, -0.02, -0.17, g, 10);
+    /* body */
+    bx(0.26, 0.34, 0.18, 0x2b3528, 0, 0, 0, g);
+    bx(0.28, 0.05, 0.2, 0x1d251c, 0, 0.18, 0.005, g);
+    bx(0.28, 0.05, 0.2, 0x1d251c, 0, -0.18, 0.005, g);
+    bx(0.29, 0.34, 0.025, 0x1a2119, 0, 0, 0.095, g);
+    /* lens and IR array */
+    cy(0.075, 0.085, 0.12, 0x0f1315, 0, 0.02, 0.13, g, 14).rotation.x = PI / 2;
+    const glassLens = cy(0.05, 0.05, 0.035, 0x123a4a, 0, 0.02, 0.19, g, 14);
+    glassLens.rotation.x = PI / 2;
+    glassLens.material = new THREE.MeshLambertMaterial({ color: 0x1c5f74, emissive: 0x0a2a33 });
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * PI * 2;
+      sp(0.013, 0x8a1a12, Math.cos(a) * 0.097, 0.02 + Math.sin(a) * 0.097, 0.175, g);
     }
-    const led = sp(0.024, 0xff3020, 0, 0.12, 0.09, g, 1);
-    cy(0.008, 0.01, 0.22, 0x1a1a1a, 0.1, 0.28, -0.02, g, 5);
-    bx(0.16, 0.09, 0.02, 0x1c3a2c, -0.1, 0.22, 0.04, g);
-    bx(0.1, 0.05, 0.005, 0xe8e4d8, 0, -0.13, 0.085, g);
+    const led = sp(0.022, 0xff3020, 0, 0.13, 0.1, g, 1);
+    const pir = sp(0.042, 0x3a2a1a, 0, -0.11, 0.11, g);
+    pir.scale.z = 0.5;
+    /* ports, screws, plate, antenna */
+    cy(0.018, 0.018, 0.02, 0x1a1a1a, -0.1, -0.13, 0.11, g, 8).rotation.x = PI / 2;
+    cy(0.02, 0.02, 0.02, 0x6a6a6a, 0.09, 0.15, 0.11, g, 8).rotation.x = PI / 2;
+    for (const sx of [-0.11, 0.11]) cy(0.008, 0.008, 0.01, 0x9a9a9a, sx, -0.15, 0.105, g, 6).rotation.x = PI / 2;
+    cy(0.008, 0.01, 0.24, 0x1a1a1a, 0.1, 0.28, -0.02, g, 5);
+    bx(0.16, 0.09, 0.02, 0x1c3a2c, -0.09, 0.23, 0.05, g);
+    const plate = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.16, 0.06),
+      new THREE.MeshBasicMaterial({ map: camPlate(i) }),
+    );
+    plate.position.set(0, -0.1, 0.093);
+    g.add(plate);
     c.led = led;
     c.trap = g;
+    c.post = pole;
     g.visible = false;
-    const gl = sprite(glowGreen, 0.55, c.x, 1.75, c.z, sc, 0.9);
+    const gl = sprite(glowGreen, 0.6, c.mount.x, 1.95, c.mount.z, sc, 0.9);
     glints.push(gl);
     c.glint = gl;
   });
@@ -2512,48 +2820,106 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
   }
   function buildCorpse() {
     const g = new THREE.Group();
-    bx(0.7, 0.22, 1.0, 0x4f554c, 0, 0.14, 0, g);            // jacket
-    bx(0.54, 0.08, 0.72, 0x3f453d, 0, 0.24, -0.06, g);      // back
-    bx(0.5, 0.12, 0.16, 0x6b3a2a, 0, 0.16, 0.42, g);        // belt line
-    sp(0.16, 0xc9bfa6, 0, 0.16, -0.62, g);                  // skull
-    const hair = sp(0.15, 0x2a2320, 0, 0.21, -0.68, g);
-    hair.scale.set(1.05, 0.8, 0.9);
-    cy(0.08, 0.08, 0.62, 0x4a4d42, -0.24, 0.12, 0.6, g, 6).rotation.x = PI / 2.2;
-    cy(0.08, 0.08, 0.62, 0x4a4d42, 0.24, 0.12, 0.6, g, 6).rotation.x = PI / 1.9;
-    bx(0.18, 0.12, 0.3, 0x2a2420, -0.26, 0.1, 0.92, g);      // boots
-    bx(0.18, 0.12, 0.3, 0x2a2420, 0.26, 0.1, 0.9, g);
-    cy(0.07, 0.07, 0.55, 0x6b6f60, -0.44, 0.13, -0.1, g, 6).rotation.z = PI / 2.3;
-    cy(0.07, 0.07, 0.55, 0x6b6f60, 0.44, 0.13, -0.06, g, 6).rotation.z = -PI / 2.3;
-    sp(0.06, 0xc9bfa6, -0.66, 0.1, -0.16, g);                // hands
-    sp(0.06, 0xc9bfa6, 0.66, 0.1, -0.12, g);
+    const jacket = 0x4f554c,
+      jacketD = 0x3a4038,
+      denim = 0x3c4350,
+      skin = 0xc9bfa6;
+    /* the body lies rolled half onto its side, one arm thrown out */
+    const body = new THREE.Group();
+    body.position.y = 0.18;
+    body.rotation.z = 0.1;
+    body.rotation.y = -0.12;
+    g.add(body);
+    bx(0.68, 0.24, 1.0, jacket, 0, 0.02, 0, body);
+    bx(0.54, 0.1, 0.8, jacketD, 0, 0.16, -0.02, body);
+    bx(0.6, 0.14, 0.26, denim, 0, 0.0, 0.52, body);
+    bx(0.5, 0.05, 0.14, 0x2a2420, 0, 0.13, 0.42, body);
+    bx(0.06, 0.12, 0.1, 0x8a8268, -0.14, -0.06, 0.42, body);
+    /* collar, zip, pockets, patches */
+    bx(0.5, 0.08, 0.12, jacketD, 0, 0.12, -0.5, body);
+    bx(0.03, 0.03, 0.86, 0x2f342d, 0, 0.15, 0.0, body);
+    for (const sx of [-1, 1]) bx(0.18, 0.02, 0.14, jacketD, sx * 0.2, 0.145, 0.12, body);
+    bx(0.16, 0.02, 0.12, 0x6b3a2a, 0.22, 0.145, -0.2, body);
+    /* legs and boots */
+    for (const sx of [-1, 1]) {
+      const leg = cy(0.095, 0.08, 0.66, denim, sx * 0.18, 0.02, 0.82, body, 7);
+      leg.rotation.x = PI / 2 + sx * 0.12;
+      leg.rotation.z = sx * 0.1;
+      bx(0.19, 0.14, 0.3, 0x2a2420, sx * 0.22, 0.04, 1.16, body);
+      bx(0.2, 0.05, 0.32, 0x171513, sx * 0.22, -0.02, 1.17, body);
+    }
+    /* arms: one out, one under the body */
+    const armL = cy(0.075, 0.07, 0.6, jacket, -0.42, 0.05, -0.1, body, 6);
+    armL.rotation.z = PI / 2.1;
+    const armR = cy(0.07, 0.06, 0.56, jacket, 0.4, 0.02, 0.22, body, 6);
+    armR.rotation.x = PI / 2.3;
+    armR.rotation.z = -0.3;
+    sp(0.062, skin, -0.7, 0.03, -0.16, body);
+    sp(0.058, skin, 0.44, 0.0, 0.5, body);
+    for (let i = 0; i < 4; i++) {
+      const f = cy(0.012, 0.016, 0.13, skin, -0.78 + i * 0.03, 0.02, -0.12 - i * 0.03, body, 4);
+      f.rotation.z = PI / 2.2;
+    }
+    /* head, hair, mouth open */
+    const head = new THREE.Group();
+    head.position.set(0.04, 0.1, -0.62);
+    head.rotation.set(-0.2, 0.4, 0.5);
+    body.add(head);
+    const skull = sp(0.155, skin, 0, 0, 0, head);
+    skull.scale.set(1, 1.05, 1.12);
+    const hair = sp(0.15, 0x2a2320, 0, 0.03, -0.03, head);
+    hair.scale.set(1.05, 0.95, 1.02);
+    const jaw = bx(0.13, 0.07, 0.1, 0x8f7f64, 0, -0.1, 0.08, head);
+    jaw.rotation.x = 0.4;
+    sp(0.02, 0x1a1410, -0.05, 0.02, 0.13, head);
+    sp(0.02, 0x1a1410, 0.05, 0.02, 0.13, head);
+    bx(0.05, 0.06, 0.04, 0x5a100c, 0.02, -0.02, 0.14, head);
+    /* his camera, strap still around his neck */
+    const camG = new THREE.Group();
+    camG.position.set(0.3, 0.16, 0.3);
+    camG.rotation.set(0.4, 0.8, 0.6);
+    body.add(camG);
+    bx(0.28, 0.2, 0.16, 0x22221f, 0, 0, 0, camG);
+    cy(0.065, 0.075, 0.12, 0x111213, 0, 0.01, 0.12, camG, 12).rotation.x = PI / 2;
+    cy(0.05, 0.05, 0.02, 0x3a2a1a, 0, 0.01, 0.18, camG, 12).rotation.x = PI / 2;
+    bx(0.06, 0.04, 0.05, 0x9a958a, -0.1, 0.12, 0, camG);
+    const strap = cy(0.012, 0.012, 0.5, 0x3a2a20, -0.1, 0.05, 0.3, body, 4);
+    strap.rotation.x = 1.1;
+    /* blood pool and splashes */
     const blood = new THREE.Mesh(
-      new THREE.CircleGeometry(1.2, 18),
+      new THREE.CircleGeometry(1.2, 22),
       new THREE.MeshBasicMaterial({ color: 0x5a0f0a, transparent: true, opacity: 0.92 }),
     );
     blood.rotation.x = -PI / 2;
     blood.position.y = 0.03;
     blood.scale.set(1, 0.72, 1);
     g.add(blood);
-    for (let i = 0; i < 7; i++) {
-      const size = 0.1 + R() * 0.22;
-      const s = new THREE.Mesh(
-        new THREE.CircleGeometry(size, 8),
+    for (let i = 0; i < 9; i++) {
+      const size = 0.08 + R() * 0.24;
+      const spl = new THREE.Mesh(
+        new THREE.CircleGeometry(size, 9),
         new THREE.MeshBasicMaterial({ color: 0x4d0c08, transparent: true, opacity: 0.85 }),
       );
-      s.rotation.x = -PI / 2;
-      s.position.set((R() - 0.5) * 2.8, 0.035, (R() - 0.5) * 2.8);
-      g.add(s);
+      spl.rotation.x = -PI / 2;
+      spl.position.set((R() - 0.5) * 2.9, 0.035, (R() - 0.5) * 2.9);
+      spl.scale.set(1, 0.5 + R() * 0.6, 1);
+      g.add(spl);
     }
-    /* drag marks leading away from the body */
-    for (let i = 0; i < 3; i++) {
+    /* drag marks leading into the trees */
+    for (let i = 0; i < 4; i++) {
       const m = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.12, 1.5),
+        new THREE.PlaneGeometry(0.1, 1.4),
         new THREE.MeshBasicMaterial({ color: 0x3a0806, transparent: true, opacity: 0.5 }),
       );
       m.rotation.x = -PI / 2;
       m.position.set((R() - 0.5) * 0.4, 0.032, 1.4 + i * 1.1);
+      m.rotation.z = (R() - 0.5) * 0.1;
       g.add(m);
     }
+    /* scattered gear */
+    bx(0.16, 0.1, 0.26, 0x3a4034, -0.85, 0.06, 0.5, g).rotation.y = 0.7;
+    cy(0.05, 0.05, 0.13, 0x9a958a, 0.9, 0.07, 0.15, g, 8).rotation.z = PI / 2;
+    bx(0.22, 0.02, 0.16, 0xd8d2c0, -0.55, 0.04, -0.72, g).rotation.y = -0.5;
     return g;
   }
   const corpse = buildCorpse();
@@ -2573,35 +2939,88 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
   const HIDE = new THREE.Vector3(hideBush.position.x, 0, hideBush.position.z);
   function buildCultist() {
     const g = new THREE.Group();
-    const robe = new THREE.Mesh(new THREE.ConeGeometry(0.56, 1.78, 9), M(0x2a1218));
-    robe.position.y = 0.89;
-    g.add(robe);
-    const hem = new THREE.Mesh(new THREE.ConeGeometry(0.62, 0.28, 9), M(0x1d0b10));
-    hem.position.y = 0.14;
-    g.add(hem);
-    cy(0.42, 0.42, 0.06, 0x160709, 0, 1.02, 0, g, 9);        // rope belt
-    cy(0.3, 0.36, 0.5, 0x261016, 0, 1.55, 0, g, 9);          // shoulders
-    const hood = sp(0.27, 0x1c0d12, 0, 1.86, 0, g);
-    hood.scale.set(1.05, 1.15, 1.08);
-    const cowl = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.5, 8), M(0x1c0d12));
-    cowl.position.set(0, 2.0, -0.06);
-    g.add(cowl);
-    const face = new THREE.Mesh(new THREE.CircleGeometry(0.16, 9), M(0x050506));
-    face.position.set(0, 1.82, 0.24);
-    g.add(face);
-    cy(0.09, 0.11, 0.9, 0x2a1218, -0.46, 1.45, 0.06, g, 6).rotation.z = 0.16;
-    cy(0.09, 0.11, 0.9, 0x2a1218, 0.46, 1.45, 0.06, g, 6).rotation.z = -0.16;
-    const staff = cy(0.028, 0.035, 2.1, 0x3a2a1c, 0.62, 1.05, 0.1, g, 6);
-    staff.rotation.z = -0.1;
-    sp(0.07, 0xc8241a, 0.6, 2.12, 0.1, g, 0.5);
-    for (let i = 0; i < 3; i++) {
-      const charm = cy(0.02, 0.02, 0.22, 0xd8d0b8, -0.2 + i * 0.2, 1.5, 0.34, g, 5);
-      charm.rotation.x = 0.3;
+    const robe = 0x2a1218,
+      robeD = 0x210d12,
+      trim = 0x7a2a22;
+    /* robe: layered skirt with folds, so it does not read as a cone */
+    const skirt = new THREE.Group();
+    skirt.position.y = 0.9;
+    g.add(skirt);
+    const hem = new THREE.Mesh(new THREE.ConeGeometry(0.62, 1.82, 12), M(robe));
+    hem.position.y = 0;
+    skirt.add(hem);
+    cy(0.6, 0.62, 0.14, robeD, 0, -0.85, 0, skirt, 12);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * PI * 2;
+      const fold = bx(0.1, 1.6, 0.04, i % 2 ? robeD : robe, Math.cos(a) * 0.4, -0.1, Math.sin(a) * 0.4, skirt);
+      fold.rotation.y = -a;
+      fold.rotation.z = Math.cos(a) * 0.08;
     }
-    const e1 = sp(0.035, 0xff2a1a, -0.07, 1.84, 0.25, g, 1),
-      e2 = sp(0.035, 0xff2a1a, 0.07, 1.84, 0.25, g, 1);
+    cy(0.42, 0.42, 0.06, 0x160709, 0, 0.02, 0, skirt, 12);
+    cy(0.05, 0.05, 0.9, 0x8a7a5c, 0, -0.4, 0.36, skirt, 5).rotation.x = -0.05;
+    /* torso and shoulders */
+    const chest = cy(0.3, 0.38, 0.56, robe, 0, 1.36, 0, g, 12);
+    const shawl = cy(0.32, 0.36, 0.3, robeD, 0, 1.62, 0, g, 12);
+    bx(0.56, 0.1, 0.2, robeD, 0, 1.5, 0.2, g);
+    /* hood with a void where the face should be */
+    const hood = new THREE.Group();
+    hood.position.y = 1.84;
+    g.add(hood);
+    const cowl = sp(0.29, robeD, 0, 0.02, -0.01, hood);
+    cowl.scale.set(1.05, 1.16, 1.1);
+    const peak = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.52, 9), M(robeD));
+    peak.position.set(0, 0.24, -0.05);
+    hood.add(peak);
+    const face = new THREE.Mesh(new THREE.CircleGeometry(0.16, 12), M(0x040405));
+    face.position.set(0, -0.01, 0.255);
+    hood.add(face);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.165, 0.024, 6, 14), M(robe));
+    rim.position.set(0, -0.01, 0.25);
+    hood.add(rim);
+    /* arms with wide sleeves, one holding the staff, one a lantern */
+    const arms = {};
+    for (const sx of [-1, 1]) {
+      const shoulder = new THREE.Group();
+      shoulder.position.set(sx * 0.42, 1.6, 0.02);
+      g.add(shoulder);
+      cy(0.075, 0.09, 0.62, robe, 0, -0.32, 0, shoulder, 7);
+      const sleeve = cy(0.1, 0.18, 0.48, robeD, 0, -0.5, 0.02, shoulder, 8);
+      const hand = sp(0.055, 0xbfae90, 0, -0.72, 0.03, shoulder);
+      arms[sx < 0 ? "L" : "R"] = shoulder;
+      shoulder.rotation.z = -sx * 0.16;
+      shoulder.rotation.x = -0.12;
+    }
+    /* staff with a bound charm */
+    const staff = new THREE.Group();
+    staff.position.set(0.62, 0, 0.12);
+    staff.rotation.z = -0.09;
+    g.add(staff);
+    cy(0.028, 0.038, 2.1, 0x3a2a1c, 0, 1.05, 0, staff, 7);
+    cy(0.03, 0.03, 0.06, 0x8a7a5c, 0, 1.5, 0, staff, 7);
+    const charm = sp(0.07, 0xc8241a, 0, 2.12, 0, staff, 0.5);
+    for (let i = 0; i < 3; i++) {
+      const bone = cy(0.014, 0.018, 0.26, 0xd8d0b8, -0.02 + i * 0.03, 1.92 - i * 0.14, 0.04, staff, 4);
+      bone.rotation.x = 0.3 + i * 0.2;
+    }
+    /* lantern in the other hand */
+    const lant = new THREE.Group();
+    lant.position.set(-0.72, 1.0, 0.16);
+    g.add(lant);
+    bx(0.14, 0.2, 0.14, 0x2b2a26, 0, 0, 0, lant);
+    bx(0.1, 0.14, 0.1, 0xffcf8a, 0, 0, 0, lant, 0.55);
+    bx(0.16, 0.03, 0.16, 0x1d1c19, 0, 0.12, 0, lant);
+    cy(0.008, 0.008, 0.14, 0x6a6a6a, 0, 0.2, 0, lant, 4);
+    const lantGlow = sprite(glowAmber, 0.55, 0, 0, 0, lant, 0.55);
+    /* eyes, shown only when the ritual turns */
+    const e1 = sp(0.032, 0xff2a1a, -0.065, 1.85, 0.26, g, 1),
+      e2 = sp(0.032, 0xff2a1a, 0.065, 1.85, 0.26, g, 1);
     e1.visible = e2.visible = false;
+    sprite(glowRed, 0.3, -0.065, 1.85, 0.3, g, 0.7).visible = false;
     g.userData.eyes = [e1, e2];
+    g.userData.robe = skirt;
+    g.userData.armL = arms.L;
+    g.userData.armR = arms.R;
+    g.userData.lant = lantGlow;
     g.visible = false;
     sc.add(g);
     return g;
@@ -2616,53 +3035,149 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
   }
   function buildMonster() {
     const g = new THREE.Group();
-    const dark = 0x0e0e12,
-      darker = 0x08080b;
-    /* long legs, thin torso */
-    cy(0.085, 0.12, 1.4, dark, -0.24, 0.7, 0, g, 7);
-    cy(0.085, 0.12, 1.4, dark, 0.24, 0.7, 0, g, 7);
-    bx(0.26, 0.14, 0.42, darker, -0.25, 0.06, 0.12, g);
-    bx(0.26, 0.14, 0.42, darker, 0.25, 0.06, 0.12, g);
-    const torso = cy(0.26, 0.38, 1.25, dark, 0, 1.95, 0, g, 8);
-    const ribs = cy(0.3, 0.34, 0.3, darker, 0, 1.7, 0, g, 8);
-    const aL = cy(0.07, 0.085, 1.85, dark, -0.46, 1.7, 0, g, 7),
-      aR = cy(0.07, 0.085, 1.85, dark, 0.46, 1.7, 0, g, 7);
-    aL.rotation.z = 0.2;
-    aR.rotation.z = -0.2;
-    /* clawed hands */
+    const skin = 0x141319,
+      skinD = 0x0a0a0d,
+      bone = 0x9a927e,
+      rag = 0x101014;
+    /* pelvis: everything hangs off it so the walk reads as a body */
+    const pelvis = new THREE.Group();
+    pelvis.position.y = 1.06;
+    g.add(pelvis);
+    const hips = sp(0.2, skinD, 0, 0, 0, pelvis);
+    hips.scale.set(1.15, 0.8, 0.9);
+    /* legs: hip, knee, ankle */
+    const legs = {};
     for (const sx of [-1, 1]) {
-      sp(0.09, 0x060607, sx * 0.6, 2.58, 0.04, g);
+      const hipJ = new THREE.Group();
+      hipJ.position.set(sx * 0.16, -0.02, 0);
+      pelvis.add(hipJ);
+      cy(0.068, 0.095, 0.54, skin, 0, -0.27, 0, hipJ, 8);
+      const knee = new THREE.Group();
+      knee.position.y = -0.55;
+      hipJ.add(knee);
+      sp(0.062, skinD, 0, 0, 0, knee);
+      cy(0.045, 0.062, 0.5, skin, 0, -0.26, 0.02, knee, 7);
+      const ankle = new THREE.Group();
+      ankle.position.y = -0.52;
+      knee.add(ankle);
+      bx(0.11, 0.06, 0.3, skinD, 0, 0, 0.09, ankle);
       for (let i = 0; i < 3; i++) {
-        const claw = cy(0.012, 0.02, 0.28, 0xd8d8d0, sx * 0.62 + (i - 1) * 0.05, 2.72, 0.08, g, 4);
-        claw.rotation.x = -0.2;
+        const claw = cy(0.007, 0.012, 0.14, bone, (i - 1) * 0.035, -0.01, 0.24, ankle, 4);
+        claw.rotation.x = PI / 2.1;
       }
+      legs[sx < 0 ? "L" : "R"] = { hip: hipJ, knee: knee };
     }
-    const head = sp(0.21, darker, 0, 2.68, 0, g);
-    head.scale.set(1, 1.45, 0.92);
-    bx(0.16, 0.2, 0.16, 0x08080a, 0, 2.55, 0.1, g);           // jaw
-    /* antlers */
+    /* spine, hollow abdomen, ribcage */
+    const spine = new THREE.Group();
+    spine.position.y = 0.08;
+    pelvis.add(spine);
+    const abd = cy(0.15, 0.2, 0.5, skin, 0, 0.24, 0, spine, 10);
+    abd.scale.z = 0.85;
+    for (let i = 0; i < 4; i++) {
+      const rib = cy(0.2 - i * 0.012, 0.19 - i * 0.012, 0.032, bone, 0, 0.46 + i * 0.115, 0.02, spine, 10);
+      rib.scale.z = 0.82;
+      rib.rotation.z = (R() - 0.5) * 0.06;
+    }
+    const chest = cy(0.24, 0.19, 0.5, skin, 0, 0.88, 0.05, spine, 10);
+    chest.scale.z = 0.9;
+    for (let i = 0; i < 5; i++) {
+      const spike = cy(0.012, 0.03, 0.16, bone, 0, 0.98 + i * 0.02, -0.16 - i * 0.01, spine, 4);
+      spike.rotation.x = -0.9;
+    }
+    /* shoulders and long arms with elbows */
+    const sh = new THREE.Group();
+    sh.position.y = 1.02;
+    spine.add(sh);
+    const arms = {};
     for (const sx of [-1, 1]) {
-      const a1 = cy(0.025, 0.035, 0.75, 0x2a2620, sx * 0.13, 2.95, 0, g, 5);
-      a1.rotation.z = sx * 0.42;
-      const a2 = cy(0.018, 0.025, 0.5, 0x2a2620, sx * 0.33, 3.25, 0.02, g, 5);
-      a2.rotation.z = sx * 0.85;
-      const a3 = cy(0.014, 0.02, 0.36, 0x2a2620, sx * 0.2, 3.3, -0.12, g, 5);
-      a3.rotation.z = sx * 0.2;
-      a3.rotation.x = 0.5;
+      const shoulder = new THREE.Group();
+      shoulder.position.set(sx * 0.26, 0.04, 0);
+      sh.add(shoulder);
+      sp(0.075, skinD, 0, 0, 0, shoulder);
+      cy(0.055, 0.075, 0.64, skin, 0, -0.33, 0, shoulder, 8);
+      const elbow = new THREE.Group();
+      elbow.position.y = -0.64;
+      shoulder.add(elbow);
+      cy(0.038, 0.055, 0.62, skin, 0, -0.31, 0, elbow, 7);
+      const hand = new THREE.Group();
+      hand.position.y = -0.66;
+      elbow.add(hand);
+      sp(0.07, skinD, 0, 0, 0.02, hand);
+      for (let i = 0; i < 4; i++) {
+        const claw = cy(0.011, 0.017, 0.22, bone, (i - 1.5) * 0.036, -0.12, 0.03, hand, 4);
+        claw.rotation.x = -0.3 + i * 0.05;
+        claw.rotation.z = (i - 1.5) * 0.09;
+      }
+      arms[sx < 0 ? "L" : "R"] = shoulder;
+      shoulder.rotation.z = -sx * 0.1;
     }
-    /* tattered robe strips */
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 9) * PI * 2;
-      const strip = bx(0.09, 0.7 + R() * 0.7, 0.02, 0x101014, Math.cos(a) * 0.3, 1.25 + R() * 0.2, Math.sin(a) * 0.3, g);
+    /* neck and head with a working jaw */
+    const neck = new THREE.Group();
+    neck.position.set(0, 0.2, 0.06);
+    sh.add(neck);
+    cy(0.07, 0.09, 0.3, skin, 0, 0.14, 0, neck, 7);
+    const head = new THREE.Group();
+    head.position.y = 0.42;
+    neck.add(head);
+    const skull = sp(0.19, skinD, 0, 0, 0, head);
+    skull.scale.set(1, 1.2, 0.95);
+    const muzzle = bx(0.17, 0.19, 0.22, skinD, 0, -0.14, 0.1, head);
+    muzzle.rotation.x = 0.1;
+    const jaw = new THREE.Group();
+    jaw.position.set(0, -0.18, 0.05);
+    head.add(jaw);
+    bx(0.14, 0.06, 0.19, skinD, 0, -0.03, 0.08, jaw);
+    for (let i = 0; i < 5; i++) {
+      const tooth = cy(0.008, 0.016, 0.07, 0xd8d4c0, (i - 2) * 0.028, 0.0, 0.15, jaw, 4);
+      tooth.rotation.x = 0.2;
+    }
+    const mouth = bx(0.11, 0.03, 0.02, 0x7a1e1e, 0, -0.16, 0.2, head, 0.5);
+    /* eyes and their glow */
+    const e1 = sp(0.03, 0xdfffe8, -0.075, 0.02, 0.17, head, 1),
+      e2 = sp(0.03, 0xdfffe8, 0.075, 0.02, 0.17, head, 1);
+    const g1 = sprite(glowWhite, 0.22, -0.075, 0.02, 0.19, head, 0.6),
+      g2 = sprite(glowWhite, 0.22, 0.075, 0.02, 0.19, head, 0.6);
+    /* antlers, four branches a side */
+    for (const sx of [-1, 1]) {
+      const a1 = cy(0.024, 0.036, 0.78, 0x2a2620, sx * 0.12, 0.26, 0, head, 5);
+      a1.rotation.z = sx * 0.38;
+      const a2 = cy(0.018, 0.026, 0.56, 0x2a2620, sx * 0.32, 0.62, 0.02, head, 5);
+      a2.rotation.z = sx * 0.86;
+      a2.rotation.x = 0.1;
+      const a3 = cy(0.013, 0.019, 0.4, 0x2a2620, sx * 0.18, 0.66, -0.12, head, 4);
+      a3.rotation.z = sx * 0.16;
+      a3.rotation.x = 0.6;
+      const a4 = cy(0.01, 0.015, 0.3, 0x2a2620, sx * 0.46, 0.78, 0.04, head, 4);
+      a4.rotation.z = sx * 1.1;
+      a4.rotation.x = -0.25;
+      const a5 = cy(0.009, 0.013, 0.26, 0x2a2620, sx * 0.36, 0.9, -0.05, head, 4);
+      a5.rotation.z = sx * 0.62;
+      a5.rotation.x = 0.3;
+    }
+    /* rags hanging off the waist and shoulders */
+    for (let i = 0; i < 11; i++) {
+      const a = (i / 11) * PI * 2;
+      const strip = bx(0.08, 0.6 + R() * 0.8, 0.015, rag, Math.cos(a) * 0.28, 0.86 + R() * 0.25, Math.sin(a) * 0.28, spine);
       strip.rotation.y = a;
-      strip.rotation.z = (R() - 0.5) * 0.2;
+      strip.rotation.z = (R() - 0.5) * 0.24;
     }
-    const e1 = sp(0.05, 0xdfffe8, -0.085, 2.72, 0.17, g, 1),
-      e2 = sp(0.05, 0xdfffe8, 0.085, 2.72, 0.17, g, 1);
-    sprite(glowWhite, 0.6, -0.085, 2.72, 0.19, g, 0.8);
-    sprite(glowWhite, 0.6, 0.085, 2.72, 0.19, g, 0.8);
-    const mouth = bx(0.1, 0.03, 0.02, 0xb84a4a, 0, 2.52, 0.19, g, 0.4);
-    g.userData = { aL, aR, torso, head };
+    for (let i = 0; i < 4; i++) {
+      const strip = bx(0.1, 0.7 + R() * 0.4, 0.015, rag, -0.42 + i * 0.28, 0.62, 0.06, spine);
+      strip.rotation.z = (R() - 0.5) * 0.3;
+    }
+    g.userData = {
+      aL: arms.L,
+      aR: arms.R,
+      legL: legs.L.hip,
+      legR: legs.R.hip,
+      kneeL: legs.L.knee,
+      kneeR: legs.R.knee,
+      spine: spine,
+      head: head,
+      jaw: jaw,
+      eyes: [e1, e2, g1, g2],
+      mouth: mouth,
+    };
     g.visible = false;
     sc.add(g);
     return g;
@@ -2688,73 +3203,141 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
   /* animals (photos only) */
   function buildAnimal(kind) {
     const g = new THREE.Group();
-    const legs = (col, y, len, wx, wz) => {
-      [
-        [-wx, wz],
-        [wx, wz],
-        [-wx, -wz],
-        [wx, -wz],
-      ].forEach((l) => {
-        const leg = cy(0.055, 0.045, len, col, l[0], y, l[1], g, 6);
-        leg.rotation.x = (R() - 0.5) * 0.08;
-      });
+    const leg = (x, y, z, len, r, col, tilt) => {
+      const hip = new THREE.Group();
+      hip.position.set(x, y, z);
+      g.add(hip);
+      const up = cy(r * 0.9, r, len * 0.55, col, 0, -len * 0.27, 0, hip, 6);
+      const kn = new THREE.Group();
+      kn.position.y = -len * 0.55;
+      hip.add(kn);
+      cy(r * 0.7, r * 0.85, len * 0.45, col, 0, -len * 0.22, 0, kn, 6);
+      bx(r * 2.1, len * 0.12, r * 3.0, 0x2a2420, 0, -len * 0.45, r * 0.6, kn);
+      hip.rotation.z = tilt || 0;
+      return { hip: hip, kn: kn };
     };
     if (kind === 0) {
-      /* deer */
-      bx(1.0, 0.54, 0.46, 0x6b4f34, 0, 0.95, 0, g);
-      bx(0.46, 0.34, 0.4, 0x7a5c3e, -0.6, 1.02, 0, g);
-      cy(0.13, 0.16, 0.52, 0x6b4f34, -0.78, 1.32, 0, g, 6).rotation.z = 0.5;
-      bx(0.34, 0.24, 0.24, 0x7a5c3e, -1.04, 1.58, 0, g);
-      bx(0.12, 0.05, 0.06, 0x3f3327, -1.2, 1.6, 0.1, g);
-      const earL = bx(0.07, 0.16, 0.1, 0x5a4330, -1.04, 1.72, 0.14, g);
-      earL.rotation.z = 0.3;
-      const earR = bx(0.07, 0.16, 0.1, 0x5a4330, -1.04, 1.72, -0.14, g);
-      earR.rotation.z = 0.3;
-      for (const sx of [-1, 1]) {
-        const a1 = cy(0.022, 0.026, 0.42, 0x8a7050, -1.06, 1.8, sx * 0.06, g, 5);
-        a1.rotation.z = -0.25;
-        a1.rotation.x = sx * 0.3;
-        const a2 = cy(0.016, 0.02, 0.3, 0x8a7050, -1.16, 2.0, sx * 0.13, g, 5);
-        a2.rotation.z = 0.55;
-        a2.rotation.x = sx * 0.4;
+      /* roe deer, standing alert */
+      const coat = 0x6f5236,
+        coatD = 0x5a4028,
+        light = 0x8a7452;
+      const body = new THREE.Group();
+      body.position.y = 1.06;
+      g.add(body);
+      const barrel = cy(0.25, 0.29, 0.94, coat, 0, 0, 0, body, 12);
+      barrel.rotation.z = PI / 2;
+      barrel.scale.z = 0.85;
+      sp(0.27, coat, -0.44, 0, 0, body).scale.set(0.9, 1, 0.85);
+      sp(0.26, coat, 0.42, 0.01, 0, body).scale.set(0.9, 1, 0.85);
+      bx(0.4, 0.12, 0.34, light, 0, -0.2, 0, body);
+      const neck = new THREE.Group();
+      neck.position.set(0.5, 0.12, 0);
+      neck.rotation.z = -0.62;
+      body.add(neck);
+      cy(0.1, 0.14, 0.52, coat, 0, 0.24, 0, neck, 8);
+      const head = new THREE.Group();
+      head.position.set(0, 0.52, 0);
+      neck.add(head);
+      bx(0.3, 0.2, 0.2, coatD, 0.06, 0, 0, head);
+      bx(0.14, 0.12, 0.14, 0x4a3626, 0.24, -0.03, 0, head);
+      sp(0.03, 0x14110e, 0.32, -0.02, 0, head);
+      for (const sz of [-1, 1]) {
+        const ear = bx(0.05, 0.14, 0.08, coatD, 0.0, 0.12, sz * 0.11, head);
+        ear.rotation.z = 0.35;
+        ear.rotation.x = sz * 0.32;
+        const antler = cy(0.016, 0.022, 0.34, 0x8a7a5c, 0.02, 0.22, sz * 0.055, head, 5);
+        antler.rotation.z = -0.2;
+        antler.rotation.x = sz * 0.22;
+        const branch = cy(0.01, 0.014, 0.2, 0x8a7a5c, 0.02, 0.34, sz * 0.12, head, 4);
+        branch.rotation.z = 0.5;
+        branch.rotation.x = sz * 0.3;
       }
-      legs(0x503a26, 0.42, 0.84, 0.32, 0.2);
-      cy(0.03, 0.05, 0.26, 0x7a5c3e, 0.52, 1.02, 0, g, 5).rotation.z = -0.5;
+      for (const sx of [-1, 1])
+        for (const sz of [-1, 1])
+          leg(sx * 0.3, 0.9, sz * 0.18, 0.9, 0.05, sx < 0 ? coat : coatD, sx * 0.03);
+      const tail = sp(0.075, 0xd8d0bc, -0.5, 0.14, 0, body);
+      tail.scale.z = 0.6;
+      bx(0.2, 0.06, 0.16, light, -0.5, 0.05, 0, body);
     } else if (kind === 1) {
-      /* fox */
-      bx(0.62, 0.3, 0.3, 0xb45a28, 0, 0.44, 0, g);
-      bx(0.26, 0.2, 0.26, 0xd8834a, -0.3, 0.46, 0, g);
-      bx(0.3, 0.24, 0.24, 0xc06a34, -0.46, 0.56, 0, g);
-      sp(0.15, 0xc06a34, -0.4, 0.6, 0, g);
-      bx(0.14, 0.12, 0.14, 0xd8a06a, -0.62, 0.5, 0, g);
-      sp(0.035, 0x1a1410, -0.7, 0.52, 0, g);
+      /* red fox, low and ready to bolt */
+      const fur = 0xb45a28,
+        furD = 0x9a4720,
+        cream = 0xe0c3a0;
+      const body = new THREE.Group();
+      body.position.y = 0.56;
+      g.add(body);
+      const barrel = cy(0.15, 0.2, 0.62, fur, 0, 0, 0, body, 10);
+      barrel.rotation.z = PI / 2;
+      barrel.scale.z = 0.9;
+      sp(0.19, fur, -0.28, 0.02, 0, body).scale.set(0.9, 1, 0.9);
+      sp(0.17, fur, 0.28, 0.02, 0, body);
+      bx(0.3, 0.09, 0.2, cream, 0, -0.12, 0, body);
+      const neck = new THREE.Group();
+      neck.position.set(0.34, 0.06, 0);
+      body.add(neck);
+      cy(0.1, 0.13, 0.2, furD, 0, 0.08, 0, neck, 8);
+      const head = new THREE.Group();
+      head.position.set(0.08, 0.2, 0);
+      neck.add(head);
+      sp(0.13, fur, 0, 0, 0, head);
+      const snout = cy(0.03, 0.08, 0.2, cream, 0.17, -0.02, 0, head, 7);
+      snout.rotation.z = -PI / 2;
+      sp(0.028, 0x14110e, 0.27, 0.0, 0, head);
+      sp(0.022, 0x14110e, 0.09, 0.04, 0.09, head);
+      sp(0.022, 0x14110e, 0.09, 0.04, -0.09, head);
       for (const sz of [-1, 1]) {
-        const ear = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.16, 5), M(0xb45a28));
-        ear.position.set(-0.36, 0.72, sz * 0.07);
-        ear.rotation.z = -0.2;
-        g.add(ear);
+        const ear = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.18, 5), M(furD));
+        ear.position.set(-0.03, 0.14, sz * 0.08);
+        ear.rotation.z = -0.15;
+        ear.rotation.x = sz * 0.2;
+        head.add(ear);
       }
-      legs(0x8a4520, 0.2, 0.4, 0.2, 0.11);
-      /* bushy tail */
-      const t1 = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.42, 6), M(0xb45a28));
-      t1.position.set(0.42, 0.46, 0);
+      for (const sx of [-1, 1])
+        for (const sz of [-1, 1]) leg(sx * 0.2, 0.44, sz * 0.12, 0.44, 0.04, sx < 0 ? fur : furD, sx * 0.04);
+      /* tail: three tapering sections, white tip */
+      const t1 = cy(0.09, 0.13, 0.26, fur, -0.36, 0.06, 0, body, 8);
       t1.rotation.z = -1.1;
-      g.add(t1);
-      sp(0.12, 0xd8a06a, 0.62, 0.58, 0, g);
-      const tip = sp(0.07, 0xe8d8c0, 0.68, 0.63, 0, g);
+      const t2 = cy(0.07, 0.1, 0.22, furD, -0.52, 0.2, 0, body, 8);
+      t2.rotation.z = -0.9;
+      const t3 = cy(0.04, 0.07, 0.18, cream, -0.62, 0.33, 0, body, 8);
+      t3.rotation.z = -0.8;
+      sp(0.07, cream, -0.68, 0.42, 0, body);
     } else {
-      /* hare */
-      bx(0.5, 0.32, 0.28, 0x8a8578, 0, 0.46, 0, g);
-      sp(0.19, 0x9a9588, -0.26, 0.6, 0, g);
-      sp(0.14, 0x7a7568, -0.12, 0.44, 0, g);
+      /* hare, crouched, ears up */
+      const fur = 0x8a8578,
+        furD = 0x726d60,
+        cream = 0xd8d2c0;
+      const body = new THREE.Group();
+      body.position.y = 0.5;
+      body.rotation.z = 0.1;
+      g.add(body);
+      const torso = sp(0.24, fur, 0, 0, 0, body);
+      torso.scale.set(1.35, 0.85, 0.9);
+      sp(0.17, furD, 0.2, 0.02, 0, body).scale.set(1, 0.9, 0.9);
+      const head = new THREE.Group();
+      head.position.set(0.36, 0.14, 0);
+      body.add(head);
+      sp(0.14, fur, 0, 0, 0, head);
+      sp(0.08, cream, 0.12, -0.04, 0, head);
+      sp(0.025, 0x14110e, 0.2, 0.0, 0, head);
+      sp(0.022, 0x14110e, 0.06, 0.06, 0.1, head);
+      sp(0.022, 0x14110e, 0.06, 0.06, -0.1, head);
       for (const sz of [-1, 1]) {
-        const ear = bx(0.06, 0.3, 0.09, 0x6f6b60, -0.26, 0.86, sz * 0.07, g);
-        ear.rotation.z = 0.12 + sz * 0.05;
-        ear.rotation.x = sz * 0.12;
+        const ear = bx(0.05, 0.34, 0.08, furD, 0.0, 0.24, sz * 0.06, head);
+        ear.rotation.z = 0.18;
+        ear.rotation.x = sz * 0.14;
+        const inner = bx(0.025, 0.26, 0.03, 0xb08a7a, 0.015, 0.25, sz * 0.06, head);
+        inner.rotation.z = 0.18;
+        inner.rotation.x = sz * 0.14;
       }
-      const eye = sp(0.025, 0x120f0d, -0.36, 0.64, 0.09, g);
-      legs(0x6f6b60, 0.16, 0.32, 0.16, 0.1);
-      sp(0.08, 0xd8d2c0, 0.26, 0.42, 0, g);
+      for (const sx of [-1, 1])
+        for (const sz of [-1, 1]) leg(sx * 0.2, 0.44, sz * 0.11, 0.42, 0.035, sx < 0 ? fur : furD, sx * 0.05);
+      const tail = sp(0.075, cream, -0.36, 0.02, 0, body);
+      tail.scale.set(1.2, 0.9, 0.9);
+      for (const sz of [-1, 1]) {
+        const hind = sp(0.13, furD, -0.24, -0.02, sz * 0.16, body);
+        hind.scale.set(1.2, 1, 0.8);
+      }
     }
     g.traverse((o) => {
       if (o.layers) o.layers.set(1);
@@ -4398,10 +4981,34 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
     if (t > 29.4) startChase();
   }
   function walkAnim(m, t) {
-    const u = m.userData;
-    u.aL.rotation.x = Math.sin(t) * 0.5;
-    u.aR.rotation.x = -Math.sin(t) * 0.5;
-    m.position.y = Math.abs(Math.sin(t)) * 0.06;
+    const u = m.userData || {};
+    const s = Math.sin(t),
+      c = Math.cos(t);
+    if (u.aL) {
+      u.aL.rotation.x = -0.1 + s * 0.62;
+      u.aR.rotation.x = -0.1 - s * 0.62;
+      u.aL.rotation.z = 0.06 + c * 0.03;
+      u.aR.rotation.z = -0.06 - c * 0.03;
+    }
+    if (u.legL) {
+      u.legL.rotation.x = -s * 0.55;
+      u.legR.rotation.x = s * 0.55;
+    }
+    if (u.kneeL) {
+      u.kneeL.rotation.x = Math.max(0, s) * 0.85;
+      u.kneeR.rotation.x = Math.max(0, -s) * 0.85;
+    }
+    if (u.spine) {
+      u.spine.rotation.x = 0.06 + Math.abs(s) * 0.04;
+      u.spine.rotation.z = c * 0.05;
+      u.spine.rotation.y = s * 0.07;
+    }
+    if (u.head) {
+      u.head.rotation.y = Math.sin(t * 0.5) * 0.12;
+      u.head.rotation.x = -0.06 + Math.abs(c) * 0.05;
+    }
+    if (u.jaw) u.jaw.rotation.x = 0.04 + Math.max(0, Math.sin(t * 0.7)) * 0.24;
+    m.position.y = Math.abs(s) * 0.05;
   }
   function startChase() {
     G.phase = "chase";
@@ -5808,6 +6415,7 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       subTick();
       A.amb(dt);
       envTick(dt);
+      if (G.inside) sc.fog.density *= 0.14;
       if (!G.ov && G.phase !== "escape" && G.phase !== "credits") batteryTick(dt);
       if (G.lit) {
         fireLight.intensity = 1.5 + Math.sin(G.time * 13) * 0.35 + R() * 0.25;
@@ -5847,6 +6455,60 @@ if(typeof THREE==='undefined')document.write('<script src="https://unpkg.com/thr
       CAMS.forEach((c, i) => {
         if (c.trap.visible) c.led.visible = Math.sin(G.time * 3 + i) > 0;
         if (c.glint.visible) c.glint.material.opacity = 0.5 + Math.sin(G.time * 2.4 + i) * 0.35;
+      });
+      /* fire: flames breathe, embers rise, smoke drifts */
+      const burning = !!G.lit;
+      flameG.visible = embers.visible = smokePuffs[0].visible = burning;
+      coals.visible = burning;
+      if (burning) {
+        flameG.children.forEach((f, i) => {
+          const k = 0.8 + Math.sin(G.time * (6.5 + i * 2.1) + i * 1.7) * 0.2 + R() * 0.06;
+          f.scale.set(1 + Math.sin(G.time * 5 + i) * 0.1, k, 1 + Math.cos(G.time * 4 + i) * 0.1);
+          f.rotation.y = G.time * (0.7 + i * 0.35);
+          f.position.x = Math.sin(G.time * 1.7 + i) * 0.05;
+        });
+        fireGlow.material.opacity = 0.55 + Math.sin(G.time * 6.3) * 0.18;
+        const ep = embers.geometry.attributes.position;
+        for (let i = 0; i < ep.count; i++) {
+          let ey = ep.getY(i) + dt * (0.7 + R() * 0.9);
+          if (ey > 2.1) {
+            ey = 0.15;
+            ep.setX(i, (R() - 0.5) * 0.5);
+            ep.setZ(i, (R() - 0.5) * 0.5);
+          }
+          ep.setY(i, ey);
+          ep.setX(i, ep.getX(i) + Math.sin(G.time * 2 + i) * dt * 0.16);
+        }
+        ep.needsUpdate = true;
+        smokePuffs.forEach((sm, i) => {
+          sm.position.y += dt * (0.34 + i * 0.06);
+          sm.position.x += Math.sin(G.time * 0.8 + i) * dt * 0.22;
+          if (sm.position.y > 3.6) sm.position.y = 1.0;
+          sm.material.opacity = clamp(0.3 - (sm.position.y - 1) * 0.085, 0.02, 0.3);
+          sm.scale.setScalar(0.6 + (sm.position.y - 0.8) * 0.4);
+        });
+      }
+      /* living camp: cultists sway, the creature breathes, the RV lamp rocks */
+      cultists.forEach((c, i) => {
+        if (!c.visible) return;
+        const u = c.userData;
+        if (u.robe) u.robe.rotation.z = Math.sin(G.time * 0.9 + i) * 0.014;
+        if (u.armL) u.armL.rotation.x = -0.12 + Math.sin(G.time * 0.8 + i) * 0.05;
+        if (u.armR) u.armR.rotation.x = -0.12 + Math.sin(G.time * 0.8 + i + 1) * 0.05;
+        if (u.lant) u.lant.material.opacity = 0.45 + Math.sin(G.time * 8 + i) * 0.16;
+      });
+      if (monster.visible) {
+        const u = monster.userData;
+        if (u.spine && G.phase !== "chase" && G.phase !== "ritual")
+          u.spine.scale.set(1, 1 + Math.sin(G.time * 1.6) * 0.012, 1);
+        if (u.eyes)
+          u.eyes.forEach((e, i) => {
+            if (e.isSprite) e.material.opacity = 0.6 + Math.sin(G.time * 2.4 + i) * 0.25;
+          });
+      }
+      if (rv.userData.lamp) rv.userData.lamp.rotation.z = Math.sin(G.time * 0.8) * 0.02;
+      animals.forEach((a, i) => {
+        if (a.visible) a.rotation.z = Math.sin(G.time * 1.2 + i * 2) * 0.008;
       });
       if (eyesG.visible) {
         const b = Math.sin(G.time * 1.7);
